@@ -1,4 +1,4 @@
-# molmass.__main__.py
+# molmass/__main__.py
 
 import sys
 
