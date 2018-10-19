@@ -1,4 +1,7 @@
+# -*- coding: utf-8 -*-
 # molmass/setup.py
+
+"""Molmass package setuptools script."""
 
 import sys
 import re
@@ -9,7 +12,7 @@ with open('molmass/molmass.py') as fh:
     code = fh.read()
 
 version = re.search(r"__version__ = '(.*?)'", code).groups()[0]
-description = re.search(r'"""(.*)\.\n', code).groups()[0]
+description = re.search(r'"""(.*)\.[\r\n?|\n]', code).groups()[0]
 readme = re.search(r'[\r\n?|\n]{2}"""(.*)"""[\r\n?|\n]{2}from', code,
                    re.MULTILINE | re.DOTALL).groups()[0]
 license = re.search(r'(# Copyright.*?[\r\n?|\n])[\r\n?|\n]+""', code,
@@ -40,7 +43,7 @@ setup(
             'molmass_web = molmass.molmass_web:main'
             ]},
 
-    license="BSD",
+    license='BSD',
     platforms=['any'],
     classifiers=[
         'Development Status :: 4 - Beta',
