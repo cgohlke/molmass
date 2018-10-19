@@ -1,4 +1,4 @@
-# molmass.__init__.py
+# molmass/__init__.py
 
 from .elements import *
 
