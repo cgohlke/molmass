@@ -1,14 +1,18 @@
 Molecular Mass Calculations
 ===========================
 
-Calculate the molecular mass (average, nominal, and isotopic pure), the
-elemental composition, and the mass distribution spectrum of a molecule
-given by its chemical formula, relative element weights, or sequence.
+Molmass is a Python library and console script to calculate the molecular mass
+(average, nominal, and isotopic pure), the elemental composition, and the
+mass distribution spectrum of a molecule given by its chemical formula,
+relative element weights, or sequence.
+
 Calculations are based on the isotopic composition of the elements. Mass
 deficiency due to chemical bonding is not taken into account.
+
 Examples of valid formulas are ``H2O``, ``[2H]2O``, ``CH3COOH``, ``EtOH``,
 ``CuSO4.5H2O``, ``(COOH)2``, ``AgCuRu4(H)2[CO]12{PPh3}2``, ``CGCGAATTCGCG``,
 and ``MDRGEQGLLK``.
+
 Formulas are case sensitive and ``+`` denotes the arithmetic operator,
 not an ion charge.
 
@@ -16,7 +20,7 @@ For command line usage run ``python -m molmass --help``
 
 :Author: `Christoph Gohlke <https://www.lfd.uci.edu/~gohlke/>`_
 
-:Version: 2018.8.15
+:Version: 2018.10.18
 
 Requirements
 ------------
@@ -25,7 +29,7 @@ Requirements
 Revisions
 ---------
 2018.8.15
-    Move module into molmass package.
+    Move modules into molmass package.
 2018.5.29
     Add option to start web interface from console.
 2018.5.25
