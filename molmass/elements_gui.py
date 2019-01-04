@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # elements_gui.py
 
-# Copyright (c) 2005-2018, Christoph Gohlke
+# Copyright (c) 2005-2019, Christoph Gohlke
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -34,16 +34,18 @@
 
 :Author: `Christoph Gohlke <https://www.lfd.uci.edu/~gohlke/>`_
 
-:Version: 2018.10.18
+:Version: 2019.1.1
 
 Requirements
 ------------
 * `CPython 2.7 <https://www.python.org>`_
 * `wxPython 3.0 <http://www.wxpython.org>`_
-* `Elements.py 2018.10.18 <https://www.lfd.uci.edu/~gohlke/>`_
+* `Elements.py 2019.1.1 <https://www.lfd.uci.edu/~gohlke/>`_
 
 Revisions
 ---------
+2019.1.1
+    Update copyright year.
 2018.8.15
     Move module into molmass package.
 2018.5.25
@@ -74,7 +76,7 @@ class MainApp(wx.App):
     """Main application."""
 
     name = 'Periodic Table of Elements'
-    version = '2018.10.18'
+    version = '2019.1.1'
     website = 'https://www.lfd.uci.edu/~gohlke/'
     copyright = ('Christoph Gohlke\n'
                  'Laboratory for Fluorescence Dynamics\n'
