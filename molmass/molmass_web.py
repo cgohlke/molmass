@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # molmass_web.py
 
-# Copyright (c) 2005-2018, Christoph Gohlke
+# Copyright (c) 2005-2019, Christoph Gohlke
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -36,15 +36,17 @@ Run ``python molmass_web.py`` to execute the script in a local web server.
 
 :Author: `Christoph Gohlke <https://www.lfd.uci.edu/~gohlke/>`_
 
-:Version: 2018.10.18
+:Version: 2019.1.1
 
 Requirements
 ------------
 * `CPython 2.7 or 3.5+ <https://www.python.org>`_
-* `Molmass.py 2018.10.18 <https://www.lfd.uci.edu/~gohlke/>`_
+* `Molmass.py 2019.1.1 <https://www.lfd.uci.edu/~gohlke/>`_
 
 Revisions
 ---------
+2019.1.1
+    Update copyright year.
 2018.8.15
     Move module into molmass package.
 2018.5.29
@@ -67,7 +69,7 @@ Revisions
 
 from __future__ import division, print_function
 
-__version__ = '2018.10.18'
+__version__ = '2019.1.1'
 __docformat__ = 'restructuredtext en'
 
 import os
@@ -130,10 +132,10 @@ title="Molecular Mass Calculator version {version} by Christoph Gohlke"
 </body>
 </html>"""
 
-HELP = """<p>This form calculates the molecular mass (average, monoisotopic,
-and nominal), the elemental composition, and the mass distribution spectrum
-of a molecule given by its chemical formula, relative element weights,
-or sequence.</p>
+HELP = """<p>This web application calculates the molecular mass (average,
+monoisotopic, and nominal), the elemental composition, and the mass
+distribution spectrum of a molecule given by its chemical formula, relative
+element weights, or sequence.</p>
 <p>Calculations are based on the
 <a href="?q=isotopes" rel="nofollow">isotopic composition of the elements</a>.
 Mass deficiency due to chemical bonding is not considered.
