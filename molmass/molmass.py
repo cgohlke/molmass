@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # molmass.py
 
-# Copyright (c) 1990-2018, Christoph Gohlke
+# Copyright (c) 1990-2019, Christoph Gohlke
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -51,7 +51,7 @@ For command line usage run ``python -m molmass --help``
 
 :Author: `Christoph Gohlke <https://www.lfd.uci.edu/~gohlke/>`_
 
-:Version: 2018.10.18
+:Version: 2019.1.1
 
 Requirements
 ------------
@@ -59,6 +59,8 @@ Requirements
 
 Revisions
 ---------
+2019.1.1
+    Update copyright year.
 2018.8.15
     Move modules into molmass package.
 2018.5.29
@@ -100,7 +102,7 @@ Relative mass    Fraction %      Intensity
 
 from __future__ import division, print_function
 
-__version__ = '2018.10.18'
+__version__ = '2019.1.1'
 __docformat__ = 'restructuredtext en'
 __all__ = ('analyze', 'Formula', 'FormulaError', 'Spectrum', 'Composition',
            'test', 'main', 'from_fractions', 'from_elements', 'from_oligo',
