@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # elements.py
 
-# Copyright (c) 2005-2018, Christoph Gohlke
+# Copyright (c) 2005-2019, Christoph Gohlke
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -37,7 +37,7 @@ and descriptive properties of the elements are stored as instance attributes.
 
 :Author: `Christoph Gohlke <https://www.lfd.uci.edu/~gohlke/>`_
 
-:Version: 2018.10.18
+:Version: 2019.1.1
 
 Requirements
 ------------
@@ -45,8 +45,10 @@ Requirements
 
 Revisions
 ---------
+2019.1.1
+    Update copyright year.
 2018.8.15
-    Move module into molmass package.
+    Move modules into molmass package.
 2018.5.25
     Style and docstring fixes.
 2016.2.25
@@ -82,7 +84,7 @@ Examples
 
 from __future__ import division, print_function
 
-__version__ = '2018.10.18'
+__version__ = '2019.1.1'
 __docformat__ = 'restructuredtext en'
 __all__ = 'ELEMENTS', 'Element', 'Isotope'
 
