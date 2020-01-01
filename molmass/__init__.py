@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # molmass/__init__.py
 
 from .elements import *
