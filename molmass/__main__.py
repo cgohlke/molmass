@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # molmass/__main__.py
 
 """Molmass package command line script."""
