@@ -1,22 +1,21 @@
-# -*- coding: utf-8 -*-
 # molmass.py
 
-# Copyright (c) 1990-2019, Christoph Gohlke
+# Copyright (c) 1990-2020, Christoph Gohlke
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
 #
-# * Redistributions of source code must retain the above copyright notice,
-#   this list of conditions and the following disclaimer.
+# 1. Redistributions of source code must retain the above copyright notice,
+#    this list of conditions and the following disclaimer.
 #
-# * Redistributions in binary form must reproduce the above copyright notice,
-#   this list of conditions and the following disclaimer in the documentation
-#   and/or other materials provided with the distribution.
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+#    this list of conditions and the following disclaimer in the documentation
+#    and/or other materials provided with the distribution.
 #
-# * Neither the name of the copyright holder nor the names of its
-#   contributors may be used to endorse or promote products derived from
-#   this software without specific prior written permission.
+# 3. Neither the name of the copyright holder nor the names of its
+#    contributors may be used to endorse or promote products derived from
+#    this software without specific prior written permission.
 #
 # THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
 # AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -51,16 +50,20 @@ For command line usage run ``python -m molmass --help``
 
 :Author: `Christoph Gohlke <https://www.lfd.uci.edu/~gohlke/>`_
 
-:Version: 2019.1.1
+:License: BSD 3-Clause
+
+:Version: 2020.1.1
 
 Requirements
 ------------
-* `CPython 2.7 or 3.5+ <https://www.python.org>`_
+* `CPython >= 3.6 <https://www.python.org>`_
 
 Revisions
 ---------
-2019.1.1
-    Update copyright year.
+2020.1.1
+    Update elements.py to version 2020.1.1.
+    Remove support for Python 2.7 and 3.5.
+    Update copyright.
 2018.8.15
     Move modules into molmass package.
 2018.5.29
@@ -80,34 +83,34 @@ Examples
 >>> f.empirical
 '[2H]2O'
 >>> f.mass  # average mass
-20.027603556
+20.02760855624
 >>> f.isotope.massnumber  # nominal mass
 20
 >>> f.isotope.mass  # monoisotopic mass
-20.0231181781
+20.02311817581
 >>> f.atoms
 3
 >>> print(f.composition())
 Element  Number  Relative mass  Fraction %
 2H            2       4.028204     20.1133
-O             1      15.999400     79.8867
-Total:        3      20.027604    100.0000
+O             1      15.999405     79.8867
+Total:        3      20.027609    100.0000
 >>> print(f.spectrum())
 Relative mass    Fraction %      Intensity
 20.023118         99.757000     100.000000
 21.027335          0.038000       0.038093
-22.027364          0.205000       0.205499
+22.027363          0.205000       0.205499
 
 """
 
-from __future__ import division, print_function
+__version__ = '2020.1.1'
 
-__version__ = '2019.1.1'
-__docformat__ = 'restructuredtext en'
-__all__ = ('analyze', 'Formula', 'FormulaError', 'Spectrum', 'Composition',
-           'test', 'main', 'from_fractions', 'from_elements', 'from_oligo',
-           'from_peptide', 'from_sequence', 'from_string', 'hill_sorted',
-           'GROUPS', 'AMINOACIDS', 'DEOXYNUCLEOTIDES', 'PREPROCESSORS')
+__all__ = (
+    'analyze', 'Formula', 'FormulaError', 'Spectrum', 'Composition',
+    'test', 'main', 'from_fractions', 'from_elements', 'from_oligo',
+    'from_peptide', 'from_sequence', 'from_string', 'hill_sorted',
+    'GROUPS', 'AMINOACIDS', 'DEOXYNUCLEOTIDES', 'PREPROCESSORS'
+)
 
 import sys
 import re
@@ -115,9 +118,9 @@ import math
 import copy
 from functools import reduce
 
-if __package__:
+try:
     from .elements import ELEMENTS, Isotope
-else:
+except ImportError:
     from elements import ELEMENTS, Isotope
 
 
@@ -132,18 +135,18 @@ def analyze(formula, maxatoms=250):
         f = Formula(formula)
 
         if len(str(f)) <= 50:
-            result.append('Formula: %s' % str(f))
+            result.append(f'Formula: {f}')
         if formula != f.formula:
-            result.append('Hill notation: %s' % f.formula)
+            result.append(f'Hill notation: {f.formula}')
         if f.formula != f.empirical:
-            result.append('Empirical formula: %s' % f.empirical)
+            result.append(f'Empirical formula: {f.empirical}')
 
         prec = precision_digits(f.mass, 9)
         if f.mass != f.isotope.mass:
-            result.append('\nAverage mass: %.*f' % (prec, f.mass))
+            result.append(f'\nAverage mass: {f.mass:.{prec}f}')
         result.extend((
-            'Monoisotopic mass: %.*f' % (prec, f.isotope.mass),
-            'Nominal mass: %i' % f.isotope.massnumber))
+            f'Monoisotopic mass: {f.isotope.mass:.{prec}f}',
+            f'Nominal mass: {f.isotope.massnumber}'))
 
         c = f.composition()
         if len(c) > 1:
@@ -154,19 +157,21 @@ def analyze(formula, maxatoms=250):
             if len(s) > 1:
                 result.extend((
                     '\nMass Distribution',
-                    '\nMost abundant mass: %.*f (%.3f%%)' % (prec, s.peak[0],
-                                                             s.peak[1]*100),
-                    'Mean mass: %.*f\n' % (prec, s.mean),
-                    str(s)))
+                    f'\nMost abundant mass: {s.peak[0]:.{prec}f} '
+                    f'({s.peak[1] * 100:.3f}%)',
+                    f'Mean mass: {s.mean:.{prec}f}\n',
+                    str(s)
+                ))
 
-    except Exception as e:
-        result.append('Error: %s' % e)
+    except Exception as exc:
+        result.append(f'Error: {exc}')
 
     return '\n'.join(result)
 
 
-class lazyattr(object):
+class lazyattr:
     """Lazy object attribute whose value is computed on first access."""
+
     def __init__(self, func):
         self.func = func
         # crude hack to keep docstrings and allow doctests
@@ -186,10 +191,9 @@ class lazyattr(object):
     @staticmethod
     def docstrings():
         """Docstrings of lazy attributes get appended to this string."""
-        pass
 
 
-class Formula(object):
+class Formula:
     """Chemical formula.
 
     Input string may contain only symbols of chemical elements and isotopes,
@@ -204,6 +208,7 @@ class Formula(object):
     Formula('H2O')
 
     """
+
     def __init__(self, formula='', groups=None):
         self._formula = from_string(formula, groups)
 
@@ -211,7 +216,7 @@ class Formula(object):
         return self._formula
 
     def __repr__(self):
-        return "Formula('%s')" % self._formula
+        return f"Formula('{self._formula}')"
 
     def __mul__(self, number):
         """Return this formula repeated number times as new Formula.
@@ -224,7 +229,7 @@ class Formula(object):
         """
         if not isinstance(number, int) or number < 1:
             raise TypeError('can only multipy with positive number')
-        return Formula('(%s)%i' % (self._formula, number))
+        return Formula(f'({self._formula}){number}')
 
     def __rmul__(self, number):
         """Return this formula repeated number times as new Formula.
@@ -248,7 +253,7 @@ class Formula(object):
         """
         if not isinstance(other, Formula):
             raise TypeError('can only add Formula instance')
-        return Formula('(%s)(%s)' % (self, other))
+        return Formula(f'({self})({other})')
 
     def __sub__(self, other):
         """Subtract elements of other formula and return as new Formula.
@@ -264,17 +269,19 @@ class Formula(object):
         _elements = copy.deepcopy(self._elements)
         for symbol, isotopes in other._elements.items():
             if symbol not in _elements:
-                raise ValueError('element %s not in %s' % (symbol, str(self)))
+                raise ValueError(f'element {symbol} not in {self}')
             element = _elements[symbol]
             for massnumber, count in isotopes.items():
                 if massnumber not in element:
-                    raise ValueError('element %i%s not in %s' % (
-                        massnumber, symbol, str(self)))
+                    raise ValueError(
+                        f'element {massnumber}{symbol} not in {self}'
+                    )
                 element[massnumber] -= count
                 if element[massnumber] < 0:
-                    raise ValueError('negative number of element %i%s' % (
-                        massnumber, symbol))
-                elif element[massnumber] == 0:
+                    raise ValueError(
+                        f'negative number of element {massnumber}{symbol}'
+                    )
+                if element[massnumber] == 0:
                     del element[massnumber]
                 if not element:
                     del _elements[symbol]
@@ -301,8 +308,9 @@ class Formula(object):
         validchars = set('([{<123456789ABCDEFGHIKLMNOPRSTUVWXYZ')
 
         if not formula[0] in validchars:
-            raise FormulaError("unexpected character '%s'" % formula[0],
-                               formula, 0)
+            raise FormulaError(
+                f"unexpected character '{formula[0]}'", formula, 0
+            )
 
         validchars |= set(']})>0abcdefghiklmnoprstuy')
 
@@ -316,13 +324,13 @@ class Formula(object):
             i -= 1
             char = formula[i]
             if char not in validchars:
-                raise FormulaError(
-                    "unexpected character '%s'" % char, formula, i)
+                raise FormulaError(f"unexpected character {char}'", formula, i)
             if char in '([{<':
                 level -= 1
                 if level < 0 or num != 0:
                     raise FormulaError(
-                        "missing closing parenthesis ')]}>'", formula, i)
+                        "missing closing parenthesis ')]}>'", formula, i
+                    )
             elif char in ')]}>':
                 if num == 0:
                     num = 1
@@ -341,14 +349,14 @@ class Formula(object):
             elif char.islower():
                 if not formula[i - 1].isupper():
                     raise FormulaError(
-                        "unexpected character '%s'" % char, formula, i)
+                        f"unexpected character '{char}'", formula, i)
                 ele = char
             elif char.isupper():
                 ele = char + ele
                 if num == 0:
                     num = 1
                 if ele not in ELEMENTS:
-                    raise FormulaError("unknown symbol '%s'" % ele, formula, i)
+                    raise FormulaError(f"unknown symbol '{ele}'", formula, i)
                 iso = ''
                 j = i
                 while i and formula[i - 1].isdigit():
@@ -361,7 +369,8 @@ class Formula(object):
                     iso = int(iso)
                     if iso not in ELEMENTS[ele].isotopes:
                         raise FormulaError(
-                            "unknown isotope '%i%s'" % (iso, ele), formula, i)
+                            f"unknown isotope '{iso}{ele}'", formula, i
+                        )
                 else:
                     iso = 0
                 number = num * counts[level]
@@ -449,8 +458,9 @@ class Formula(object):
         6
 
         """
-        return gcd(set(list(i)[0] for i in (
-            j.values() for j in self._elements.values())))
+        return gcd(
+            {list(i)[0] for i in (j.values() for j in self._elements.values())}
+        )
 
     @lazyattr
     def mass(self):
@@ -462,10 +472,10 @@ class Formula(object):
         Examples
         --------
         >>> Formula('C').mass
-        12.0107
+        12.01074
         >>> Formula('12C').mass
         12.0
-        >>> print('%.2f' % Formula('C48H32AgCuO12P2Ru4').mass)
+        >>> print('{:.2f}'.format(Formula('C48H32AgCuO12P2Ru4').mass))
         1438.40
 
         """
@@ -490,7 +500,7 @@ class Formula(object):
         >>> Formula('13C').isotope.massnumber
         13
         >>> print(Formula('C48H32AgCuO12P2Ru4').isotope)
-        1440, 1439.5890, 0.205134%
+        1440, 1439.5890, 0.205075%
 
         """
         result = Isotope()
@@ -517,10 +527,10 @@ class Formula(object):
         Examples
         --------
         >>> Formula('[12C]C').composition(False)
-        (('C', 2, 24.0107, 1.0),)
+        (('C', 2, 24.01074, 1.0),)
         >>> for i in Formula('[12C]C').composition(True): print(i)
-        ('C', 1, 12.0107, 0.5002228173272749)
-        ('12C', 1, 12.0, 0.4997771826727251)
+        ('C', 1, 12.01074, 0.5002236499166623)
+        ('12C', 1, 12.0, 0.49977635008333776)
 
         """
         elements = self._elements
@@ -533,7 +543,7 @@ class Formula(object):
                     count = iso[massnumber]
                     if massnumber:
                         mass = ele.isotopes[massnumber].mass * count
-                        symbol = '%i%s' % (massnumber, symbol)
+                        symbol = f'{massnumber}{symbol}'
                     else:
                         mass = ele.mass * count
                     result.append((symbol, count, mass, mass / self.mass))
@@ -562,7 +572,7 @@ class Formula(object):
         --------
         >>> def _(spectrum):
         ...     for key, val in spectrum.items():
-        ...         print('%i, %.4f, %.6f%%' % (key, val[0], val[1]*100))
+        ...         print(f'{key}, {val[0]:.4f}, {val[1]*100:.6f}%')
         >>> _(Formula('D').spectrum())
         2, 2.0141, 100.000000%
         >>> _(Formula('H').spectrum())
@@ -637,13 +647,13 @@ class Spectrum(dict):
 
     Examples
     --------
-    >>> print(Spectrum({1: [1.078, 0.9999],
-    ...                 2: [2.014, 0.0001]}))
+    >>> print(Spectrum({1: [1.078, 0.9999], 2: [2.014, 0.0001]}))
     Relative mass    Fraction %      Intensity
     1.0780000         99.990000     100.000000
     2.0140000          0.010000       0.010001
 
     """
+
     def __init__(self, *args, **kwds):
         dict.__init__(self, *args, **kwds)
         self._sorted_keys = sorted(dict.keys(self))
@@ -682,14 +692,17 @@ class Spectrum(dict):
         return sum((mass * fraction) for mass, fraction in dict.values(self))
 
     def __str__(self):
-        if not len(self):
+        if len(self) == 0:
             return ''
         result = ['Relative mass    Fraction %      Intensity']
         prec = precision_digits(self.peak[0], 9)
         norm = 100.0 / self.peak[1]
         for mass, fraction in self.values():
-            result.append('%-13.*f   %11.6f   %12.6f' % (
-                prec, mass, fraction*100.0, fraction*norm))
+            result.append(
+                '{:<13.{}f}   {:11.6f}   {:12.6f}'.format(
+                    mass, prec, fraction * 100.0, fraction * norm
+                )
+            )
         return '\n'.join(result)
 
 
@@ -707,6 +720,7 @@ class Composition(tuple):
     Total:        3      20.027000    100.0000
 
     """
+
     @lazyattr
     def total(self):
         """Return sums of counts, masses, and fractions."""
@@ -718,22 +732,29 @@ class Composition(tuple):
         return tuple(result)
 
     def __str__(self):
-        if not len(self):
-            return ""
+        if len(self) == 0:
+            return ''
         prec = precision_digits(self.total[1], 9)
         result = ['Element  Number  Relative mass  Fraction %']
         for symbol, count, mass, fraction in self:
-            result.append('%-6s %8i  %13.*f %11.4f' % (
-                symbol, count, prec, mass, fraction*100))
+            result.append(
+                '{:<6s} {:8}  {:13.{}f} {:11.4f}'.format(
+                    symbol, count, mass, prec, fraction * 100
+                )
+            )
         if len(self) > 1:
             count, mass, fraction = self.total
-            result.append('%-6s %8i  %13.*f %11.4f' % (
-                'Total:', count, prec, mass, fraction*100))
+            result.append(
+                '{:<6s} {:8}  {:13.{}f} {:11.4f}'.format(
+                    'Total:', count, mass, prec, fraction * 100
+                )
+            )
         return '\n'.join(result)
 
 
 class FormulaError(Exception):
     """Custom exception to report errors in the Formula object."""
+
     def __init__(self, msg, formula='', pos=-1):
         self.position = pos
         self.message = msg
@@ -742,10 +763,8 @@ class FormulaError(Exception):
 
     def __str__(self):
         if self.position < 0:
-            return '%s' % self.message
-        else:
-            return '%s\n%s\n%s^' % (self.message, self.formula,
-                                    '.' * self.position)
+            return str(self.message)
+        return f"{self.message}\n{self.formula}\n{'.' * self.position}^"
 
 
 def from_string(formula, groups=None):
@@ -754,7 +773,7 @@ def from_string(formula, groups=None):
     Return string should be composed of chemical elements/isotopes,
     parentheses, and numbers only. Raise FormulaError on errors.
 
-    Supports simple, non-nested, arithmetic (+ and \*), abbreviations of
+    Supports simple, non-nested, arithmetic (+ and *), abbreviations of
     common chemical groups, peptides, oligos, and mass fractions.
 
     Examples
@@ -781,15 +800,15 @@ def from_string(formula, groups=None):
     """
     try:
         formula = formula.strip().replace(' ', '')
-    except AttributeError:
-        raise FormulaError('not a string')
+    except AttributeError as exc:
+        raise FormulaError('not a string') from exc
 
     # abbreviations of common chemical groups
     if groups is None:
         groups = GROUPS
     if groups:
         for grp in reversed(sorted(groups)):
-            formula = formula.replace(grp, '(%s)' % groups[grp])
+            formula = formula.replace(grp, f'({groups[grp]})')
 
     # list of mass fractions
     if ':' in formula and ',' in formula:
@@ -798,8 +817,9 @@ def from_string(formula, groups=None):
             for item in formula.split(','):
                 item = item.split(':')
                 fractions[item[0].strip()] = float(item[1].strip())
-        except Exception:
-            raise FormulaError('invalid list of mass fractions', formula)
+        except Exception as exc:
+            raise FormulaError(
+                'invalid list of mass fractions', formula) from exc
         return from_fractions(fractions)
 
     # oligos and peptides
@@ -807,15 +827,13 @@ def from_string(formula, groups=None):
         fset = set(formula)
         if fset <= set('ATCG') and fset & set('ATG'):
             return from_oligo(formula, 'ssdna')
-        elif fset <= set('AUCG') and fset & set('AG'):
+        if fset <= set('AUCG') and fset & set('AG'):
             return from_oligo(formula, 'ssrna')
-        elif fset <= set(AMINOACIDS.keys()) and fset & set('AEGMLQRT'):
+        if fset <= set(AMINOACIDS.keys()) and fset & set('AEGMLQRT'):
             return from_peptide(formula)
-        else:
-            for dtype, func in PREPROCESSORS.items():
-                for match in re.findall(dtype + '\((.*?)\)', formula):
-                    formula = formula.replace('%s(%s)' % (dtype, match),
-                                              func(match))
+        for dtype, func in PREPROCESSORS.items():
+            for match in re.findall(dtype + r'\((.*?)\)', formula):
+                formula = formula.replace(f'{dtype}({match})', func(match))
 
     # Deuterium
     formula = re.sub('(D)(?![a-z])', '[2H]', formula)
@@ -823,10 +841,10 @@ def from_string(formula, groups=None):
     # arithmetic
     formula = formula.replace('.', '+')
     if '+' in formula:
-        for match in re.findall('(?:\+|^)((\d+)\*?(.*?))(?:(?=\+)|$)',
-                                formula):
-            formula = formula.replace(match[0],
-                                      '(%s)%s' % (match[2], match[1]))
+        for match in re.findall(
+            r'(?:\+|^)((\d+)\*?(.*?))(?:(?=\+)|$)', formula
+        ):
+            formula = formula.replace(match[0], f'({match[2]}){match[1]}')
         formula = formula.replace('+', '')
     if '-' in formula:
         FormulaError('subtraction not supported yet')
@@ -841,13 +859,13 @@ def from_elements(elements, divisor=1, *fmt):
     --------
     >>> from_elements({'C': {0: 4, 12: 2}}, 2)
     'C2[12C]'
-    >>> from_elements({'C': {0: 4, 12: 2}}, 2, '%s', '%s<sub>%i</sub>',
-    ...     '<sup>%i</sup>%s', '<sup>%i</sup>%s<sub>%i</sub>')
+    >>> from_elements({'C': {0: 4, 12: 2}}, 2, '{}', '{}<sub>{}</sub>',
+    ...     '<sup>{}</sup>{}', '<sup>{}</sup>{}<sub>{}</sub>')
     'C<sub>2</sub><sup>12</sup>C'
 
     """
     if not fmt:
-        fmt = '%s', '%s%i', '[%i%s]', '[%i%s]%i'
+        fmt = ('{}', '{}{}', '[{}{}]', '[{}{}]{}')
     formula = []
     for symbol in hill_sorted(elements):
         isotopes = elements[symbol]
@@ -855,15 +873,15 @@ def from_elements(elements, divisor=1, *fmt):
             count = isotopes[massnumber] // divisor
             if massnumber:
                 if count == 1:
-                    formula.append(fmt[2] % (massnumber, symbol))
+                    formula.append(fmt[2].format(massnumber, symbol))
                 else:
-                    formula.append(fmt[3] % (massnumber, symbol, count))
+                    formula.append(fmt[3].format(massnumber, symbol, count))
             else:
                 if count == 1:
-                    formula.append(fmt[0] % (symbol, ))
+                    formula.append(fmt[0].format(symbol))
                 else:
-                    formula.append(fmt[1] % (symbol, count))
-    return "".join(formula)
+                    formula.append(fmt[1].format(symbol, count))
+    return ''.join(formula)
 
 
 def from_fractions(fractions, maxcount=10, precision=1e-4):
@@ -892,8 +910,8 @@ def from_fractions(fractions, maxcount=10, precision=1e-4):
         if symbol[0].isupper():
             try:
                 mass = ELEMENTS[symbol].mass
-            except KeyError:
-                raise FormulaError("unknown element '%s'" % symbol)
+            except KeyError as exc:
+                raise FormulaError(f"unknown element '{symbol}'") from exc
         else:
             if symbol.startswith('['):
                 symbol = symbol[1:-1]
@@ -904,10 +922,10 @@ def from_fractions(fractions, maxcount=10, precision=1e-4):
             symbol = symbol[i:]
             try:
                 mass = ELEMENTS[symbol].isotopes[massnum].mass
-            except KeyError:
+            except KeyError as exc:
                 raise FormulaError(
-                    "unknown isotope '[%i%s]'" % (massnum, symbol))
-            symbol = '[%i%s]' % (massnum, symbol)
+                    f"unknown isotope '[{massnum}{symbol}]'") from exc
+            symbol = f'[{massnum}{symbol}]'
         numbers[symbol] = fraction / (sumfractions * mass)
 
     # divide numbers by smallest number
@@ -920,7 +938,7 @@ def from_fractions(fractions, maxcount=10, precision=1e-4):
     best = 1e6
     factor = 1
     for i in range(1, maxcount):
-        x = sum(abs((i*n) - round(i*n)) for n in numbers.values())
+        x = sum(abs((i * n) - round(i * n)) for n in numbers.values())
         if x < best:
             best = x
             factor = i
@@ -931,10 +949,10 @@ def from_fractions(fractions, maxcount=10, precision=1e-4):
     for symbol, number in sorted(numbers.items()):
         count = int(round(factor * number))
         if count > 1:
-            formula.append("%s%i" % (symbol, count))
+            formula.append(f'{symbol}{count}')
         else:
             formula.append(symbol)
-    return "".join(formula)
+    return ''.join(formula)
 
 
 def from_sequence(sequence, items):
@@ -951,16 +969,16 @@ def from_sequence(sequence, items):
     '(B)2'
 
     """
-    counts = dict((key, 0) for key in items)
+    counts = {key: 0 for key in items}
     for item in sequence:
         counts[item] += 1
     formula = []
     for key in sorted(items):
         num = counts[key]
         if num == 1:
-            formula.append('(%s)' % items[key])
+            formula.append(f'({items[key]})')
         elif num:
-            formula.append('(%s)%i' % (items[key], num))
+            formula.append(f'({items[key]}){num}')
     return ''.join(formula)
 
 
@@ -971,11 +989,11 @@ def from_peptide(sequence):
     '((C2H3NO)2H2O)'
     >>> f = Formula(from_peptide('GPAVL IMCFY WHKRQ NEDST'))
     >>> print(f.formula, f.atoms, round(f.mass, 6))
-    C107H159N29O30S2 327 2395.71366
+    C107H159N29O30S2 327 2395.717936
 
     """
     sequence = sequence.replace(' ', '')
-    return '(%sH2O)' % from_sequence(sequence, AMINOACIDS)
+    return f'({from_sequence(sequence, AMINOACIDS)}H2O)'
 
 
 def from_oligo(sequence, dtype='ssdna'):
@@ -993,10 +1011,10 @@ def from_oligo(sequence, dtype='ssdna'):
 
     >>> f = Formula(from_oligo('ATC G', 'dsdna'))
     >>> print(f.formula, f.atoms, round(f.mass, 6))
-    C78H102N30O50P8 268 2507.605568
+    C78H102N30O50P8 268 2507.609138
     >>> f = Formula(from_oligo('AUC G', 'ssrna'))
     >>> print(f.formula, f.atoms, round(f.mass, 6))
-    C38H49N15O29P4 135 1303.773804
+    C38H49N15O29P4 135 1303.775567
 
     """
     dtype = dtype.lower()
@@ -1004,12 +1022,12 @@ def from_oligo(sequence, dtype='ssdna'):
     items = NUCLEOTIDES if 'rna' in dtype else DEOXYNUCLEOTIDES
     if dtype.startswith('ds'):
         complements = items['complements']
-        t = "".join(complements[i] for i in sequence)
+        t = ''.join(complements[i] for i in sequence)
         formula = from_sequence(sequence + t, items)
-        formula = "(%s(H2O)2)" % formula
+        formula = f'({formula}(H2O)2)'
     else:
         formula = from_sequence(sequence, items)
-        formula = "(%sH2O)" % formula
+        formula = f'({formula}H2O)'
     return formula
 
 
@@ -1029,8 +1047,7 @@ def hill_sorted(symbols):
         if 'H' in symbols:
             symbols.remove('H')
             yield 'H'
-    for symbol in sorted(symbols):
-        yield symbol
+    yield from sorted(symbols)
 
 
 def gcd(numbers):
@@ -1048,6 +1065,7 @@ def gcd(numbers):
     1
 
     """
+
     def _gcd(a, b):
         """Return greatest common divisor of two integer numbers."""
         while b:
@@ -1195,7 +1213,8 @@ GROUPS = {
     'Val': 'C5H9NO',
     'Valoh': 'C5H9NO2',
     'Valohp': 'C5H8NO2',
-    'Xan': 'C13H9O'}
+    'Xan': 'C13H9O',
+}
 
 # Amino acids - H2O
 AMINOACIDS = {
@@ -1218,7 +1237,8 @@ AMINOACIDS = {
     'E': 'C5H7NO3',  # Glutamic Acid, Glu
     'D': 'C4H5NO3',  # Aspartic Acid, Asp
     'S': 'C3H5NO2',  # Serine, Ser
-    'T': 'C4H7NO2'}  # Threonine, Thr
+    'T': 'C4H7NO2',  # Threonine, Thr
+}
 
 # Deoxynucleotide monophosphates - H2O
 DEOXYNUCLEOTIDES = {
@@ -1226,7 +1246,8 @@ DEOXYNUCLEOTIDES = {
     'T': 'C10H13N2O7P',
     'C': 'C9H12N3O6P',
     'G': 'C10H12N5O6P',
-    'complements': {'A': 'T', 'T': 'A', 'C': 'G', 'G': 'C'}}
+    'complements': {'A': 'T', 'T': 'A', 'C': 'G', 'G': 'C'},
+}
 
 # Nucleotide monophosphates - H2O
 NUCLEOTIDES = {
@@ -1234,7 +1255,8 @@ NUCLEOTIDES = {
     'U': 'C9H11N2O8P',
     'C': 'C9H12N3O7P',
     'G': 'C10H12N5O7P',
-    'complements': {'A': 'U', 'U': 'A', 'C': 'G', 'G': 'C'}}
+    'complements': {'A': 'U', 'U': 'A', 'C': 'G', 'G': 'C'},
+}
 
 # Formula preprocessors
 PREPROCESSORS = {
@@ -1242,75 +1264,86 @@ PREPROCESSORS = {
     'ssdna': lambda x: from_oligo(x, 'ssdna'),
     'dsdna': lambda x: from_oligo(x, 'dsdna'),
     'ssrna': lambda x: from_oligo(x, 'ssrna'),
-    'dsrna': lambda x: from_oligo(x, 'dsrna')}
+    'dsrna': lambda x: from_oligo(x, 'dsrna'),
+}
 
 
 def test(verbose=False):
     """Test the module and the examples in docstrings."""
-
     import doctest
+
     doctest.testmod(verbose=verbose)
 
     # these formulas should pass
-    for data in [(''.join(e.symbol for e in ELEMENTS), '', 14659.112),
-                 ('12C', '[12C]', 12.0),
-                 ('12CC', 'C[12C]', 24.0107),
-                 ('Co(Bpy)(CO)4', '', 326.9816),
-                 ('CH3CH2Cl', 'C2H5Cl', 64.5147),
-                 ('C1000H1000', 'CH', 13018.94),
-                 ('Ru2(CO)8', 'C4O4Ru', 426.2232),
-                 ('RuClH(CO)(PPh3)3', 'C55H46ClOP3Ru', 952.41392),
-                 ('PhSiMe3', 'C9H14Si', 150.29566),
-                 ('Ph(CO)C(CH3)3', 'C11H14O', 162.23156),
-                 ('HGlyGluTyrOH', 'C16H21N3O7', 367.35864),
-                 ('HCysTyrIleGlnAsnCysProLeuNH2', 'C41H65N11O11S2', 952.1519),
-                 ('HCysp(Trt)Tyrp(Tbu)IleGlnp(Trt)Asnp(Trt)ProLeuGlyNH2',
-                  'C101H113N11O11S', 1689.13532),
-                 ('CGCGAATTCGCG', 'C116H148N46O73P12', 3726),
-                 ('MDRGEQGLLK', 'C47H83N15O16S', 1146),
-                 ('CDCl3', 'C[2H]Cl3', 120.384),
-                 ('[13C]Cl4', '[13C]Cl4', 154.8153),
-                 ('C5(PhBu(EtCHBr)2)3', 'C53H78Br6', 1194.626),
-                 ('AgCuRu4(H)2[CO]12{PPh3}2', 'C48H32AgCuO12P2Ru4', 1438.4022),
-                 ('PhNH2.HCl', 'C6H8ClN', 129.5892),
-                 ('NH3.BF3', 'BF3H3N', 84.8357),
-                 ('CuSO4.5H2O', 'CuH10O9S', 249.68),
-                 ]:
+    for data in [
+        (''.join(e.symbol for e in ELEMENTS), '', 14693.181589000998),
+        ('12C', '[12C]', 12.0),
+        ('12CC', 'C[12C]', 24.0107),
+        ('Co(Bpy)(CO)4', '', 327.16),
+        ('CH3CH2Cl', 'C2H5Cl', 64.5147),
+        ('C1000H1000', 'CH', 13018.68),
+        ('Ru2(CO)8', 'C4O4Ru', 426.2232),
+        ('RuClH(CO)(PPh3)3', 'C55H46ClOP3Ru', 952.41392),
+        ('PhSiMe3', 'C9H14Si', 150.29566),
+        ('Ph(CO)C(CH3)3', 'C11H14O', 162.23156),
+        ('HGlyGluTyrOH', 'C16H21N3O7', 367.35864),
+        ('HCysTyrIleGlnAsnCysProLeuNH2', 'C41H65N11O11S2', 952.1519),
+        ('HCysp(Trt)Tyrp(Tbu)IleGlnp(Trt)Asnp(Trt)ProLeuGlyNH2',
+         'C101H113N11O11S', 1689.13532),
+        ('CGCGAATTCGCG', 'C116H148N46O73P12', 3726.4),
+        ('MDRGEQGLLK', 'C47H83N15O16S', 1146.3),
+        ('CDCl3', 'C[2H]Cl3', 120.384),
+        ('[13C]Cl4', '[13C]Cl4', 154.8153),
+        ('C5(PhBu(EtCHBr)2)3', 'C53H78Br6', 1194.626),
+        ('AgCuRu4(H)2[CO]12{PPh3}2', 'C48H32AgCuO12P2Ru4', 1438.4022),
+        ('PhNH2.HCl', 'C6H8ClN', 129.5892),
+        ('NH3.BF3', 'BF3H3N', 84.8357),
+        ('CuSO4.5H2O', 'CuH10O9S', 249.68),
+    ]:
         if verbose:
-            print("Trying Formula('%s') ..." % data[0], end='')
+            print(f"Trying Formula('{data[0]}') ...", end='')
         try:
             f = Formula(data[0])
             f.empirical
             f.mass
             f.spectrum
-        except FormulaError as e:
-            print('Error:', e)
+        except FormulaError as exc:
+            print('Error:', exc)
             continue
         if data[1] and f.empirical != data[1]:
-            print("Failure for %s:\n    Expected '%s', got '%s':" % (
-                data[0], data[1], f.empirical))
+            print(
+                "Failure for {}:\n    Expected '{}', got '{}':".format(
+                    data[0], data[1], f.empirical
+                )
+            )
             continue
-        if data[2] and abs(f.mass - data[2]) > 0.4:
-            print("Failure for %s:\n    Expected %s, got %s" % (
-                data[0], data[2], f.mass))
+        if data[2] and abs(f.mass - data[2]) > 0.1:
+            print(
+                'Failure for {}:\n    Expected {}, got {}'.format(
+                    data[0], data[2], f.mass
+                )
+            )
             continue
         if verbose:
             print('ok')
 
     # these formulas are expected to fail
-    for data in ['', '()', '2', 'a', '(a)', 'C:H', 'H:', 'C[H', 'H)2',
-                 'A', 'Aa', '2lC', '1C', '[11C]', 'H0', '()0', '(H)0C',
-                 'Ox: 0.26, 30Si: 0.74']:
+    for data in [
+        '', '()', '2', 'a', '(a)', 'C:H', 'H:', 'C[H', 'H)2',
+        'A', 'Aa', '2lC', '1C', '[11C]', 'H0', '()0', '(H)0C',
+        'Ox: 0.26, 30Si: 0.74',
+    ]:
         if verbose:
-            print("Trying Formula('%s') ..." % data, end='')
+            print(f"Trying Formula('{data}') ...", end='')
         try:
             f = Formula(data).empirical
-        except FormulaError as e:
+        except FormulaError as exc:
             if verbose:
-                print('ok\nExpected error:', e)
+                print('ok\nExpected error:', exc)
         else:
-            print("Failure expected for '%s', got '%s'" % (
-                data, Formula(data).formula))
+            print(
+                f"Failure expected for '{data}', got '{Formula(data).formula}'"
+            )
 
 
 def main(argv=None):
@@ -1326,8 +1359,9 @@ def main(argv=None):
     parser = optparse.OptionParser(
         usage='usage: %prog [options] formula',
         description=search_doc('\n\n([^|]*?)\n\n', ''),
-        version='%%prog %s' % search_doc(':Version: (.*)', 'Unknown'),
-        prog = 'molmass')
+        version='%prog {}'.format(search_doc(':Version: (.*)', 'Unknown')),
+        prog='molmass'
+    )
     opt = parser.add_option
     opt('--web', dest='web', action='store_true', default=False,
         help='start web application and open it in a web browser')
@@ -1338,28 +1372,30 @@ def main(argv=None):
     settings, formula = parser.parse_args()
 
     if settings.web:
-        if __package__:
+        try:
             from . import molmass_web  # noqa: delayed import
-        else:
+        except ImportError:
             import molmass_web  # noqa: delayed import
+
         return molmass_web.main()
-    elif settings.test:
+    if settings.test:
         test(settings.verbose)
         return 0
-    elif formula:
+    if formula:
         formula = ''.join(formula)
     else:
         parser.error('no formula specified')
 
     try:
         results = analyze(formula)
-    except Exception as e:
-        print('\nError: \n  ', e, sep='')
-        raise e
+    except Exception as exc:
+        print('\nError: \n  ', exc, sep='')
+        raise exc
     else:
         print('\n', results, sep='')
 
 
 if __name__ == '__main__':
     from pprint import pprint  # noqa: used by doctest
+
     sys.exit(main())
