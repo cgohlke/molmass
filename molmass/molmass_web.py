@@ -1,22 +1,21 @@
-# -*- coding: utf-8 -*-
 # molmass_web.py
 
-# Copyright (c) 2005-2019, Christoph Gohlke
+# Copyright (c) 2005-2020, Christoph Gohlke
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
 #
-# * Redistributions of source code must retain the above copyright notice,
-#   this list of conditions and the following disclaimer.
+# 1. Redistributions of source code must retain the above copyright notice,
+#    this list of conditions and the following disclaimer.
 #
-# * Redistributions in binary form must reproduce the above copyright notice,
-#   this list of conditions and the following disclaimer in the documentation
-#   and/or other materials provided with the distribution.
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+#    this list of conditions and the following disclaimer in the documentation
+#    and/or other materials provided with the distribution.
 #
-# * Neither the name of the copyright holder nor the names of its
-#   contributors may be used to endorse or promote products derived from
-#   this software without specific prior written permission.
+# 3. Neither the name of the copyright holder nor the names of its
+#    contributors may be used to endorse or promote products derived from
+#    this software without specific prior written permission.
 #
 # THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
 # AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -36,17 +35,20 @@ Run ``python molmass_web.py`` to execute the script in a local web server.
 
 :Author: `Christoph Gohlke <https://www.lfd.uci.edu/~gohlke/>`_
 
-:Version: 2019.1.1
+:License: BSD 3-Clause
+
+:Version: 2020.1.1
 
 Requirements
 ------------
-* `CPython 2.7 or 3.5+ <https://www.python.org>`_
-* `Molmass.py 2019.1.1 <https://www.lfd.uci.edu/~gohlke/>`_
+* `CPython >= 3.6 <https://www.python.org>`_
+* `Molmass.py 2020.1.1 <https://www.lfd.uci.edu/~gohlke/>`_
 
 Revisions
 ---------
-2019.1.1
-    Update copyright year.
+2020.1.1
+    Remove support for Python 2.7 and 3.5.
+    Update copyright.
 2018.8.15
     Move module into molmass package.
 2018.5.29
@@ -67,19 +69,16 @@ Revisions
 
 """
 
-from __future__ import division, print_function
-
-__version__ = '2019.1.1'
-__docformat__ = 'restructuredtext en'
+__version__ = '2020.1.1'
 
 import os
 import re
 import sys
 from html import escape
 
-if __package__:
+try:
     from . import molmass
-else:
+except ImportError:
     import molmass
 
 
@@ -186,12 +185,7 @@ The entire risk as to the quality and performance is with you.</p>
 <p>Molecular Mass Calculator version {version} by
 <a href="https://www.lfd.uci.edu/~gohlke/">Christoph Gohlke</a>.
 Source code is available at
-<a href="https://www.lfd.uci.edu/~gohlke/code/molmass.py.html"
->molmass.py</a>,
-<a href="https://www.lfd.uci.edu/~gohlke/code/molmass_web.py.html"
->molmass_web.py</a>, and
-<a href="https://www.lfd.uci.edu/~gohlke/code/elements.py.html"
->elements.py</a>.</p>
+<a href="https://pypi.org/project/molmass/">pypi.org</a>.</p>
 </div>"""
 
 
@@ -212,8 +206,13 @@ def response(form, url, template=PAGE, help=HELP, heads=''):
         content = help.format(version=__version__)
     if formula:
         formula = escape(formula, True)
-    return template.format(formula=formula, url=url, version=__version__,
-                           content=content, heads=heads.strip())
+    return template.format(
+        formula=formula,
+        url=url,
+        version=__version__,
+        content=content,
+        heads=heads.strip()
+    )
 
 
 def analyze(formula, maxatoms=250):
@@ -222,29 +221,36 @@ def analyze(formula, maxatoms=250):
     def html(formula):
         """Return formula as HTML string."""
         formula = re.sub(
-            r'\[(\d+)([A-Za-z]{1,2})\]', r'<sup>\1</sup>\2', formula)
+            r'\[(\d+)([A-Za-z]{1,2})\]', r'<sup>\1</sup>\2', formula
+        )
         formula = re.sub(
-            r'([A-Za-z]{1,2})(\d+)', r'\1<sub>\2</sub>', formula)
+            r'([A-Za-z]{1,2})(\d+)', r'\1<sub>\2</sub>', formula
+        )
         return formula
 
     result = []
     try:
         f = molmass.Formula(formula)
         result.append(
-            '<p><strong>Hill notation</strong>: %s</p>' % html(f.formula))
+            f'<p><strong>Hill notation</strong>: {html(f.formula)}</p>'
+        )
         if f.formula != f.empirical:
             result.append(
-                '<p><strong>Empirical formula</strong>: %s</p>' % html(
-                    f.empirical))
+                f'<p><strong>Empirical formula</strong>:'
+                f' {html(f.empirical)}</p>'
+            )
 
         prec = molmass.precision_digits(f.mass, 8)
         if f.mass != f.isotope.mass:
             result.append(
-                '<p><strong>Average mass</strong>: %.*f</p>' % (prec, f.mass))
+                f'<p><strong>Average mass</strong>: {f.mass:.{prec}f}</p>'
+            )
         result.extend((
-            '<p><strong>Monoisotopic mass</strong>: %.*f</p>' % (
-                prec, f.isotope.mass),
-            '<p><strong>Nominal mass</strong>: %i</p>' % f.isotope.massnumber))
+            f'<p><strong>Monoisotopic mass</strong>:'
+            f' {f.isotope.mass:.{prec}f}</p>',
+            f'<p><strong>Nominal mass</strong>:'
+            f' {f.isotope.massnumber}</p>',
+        ))
 
         c = f.composition()
         if len(c) > 1:
@@ -256,23 +262,27 @@ def analyze(formula, maxatoms=250):
                 '<th scope="col" align="right">Number</th>',
                 '<th scope="col" align="right">Relative mass</th>',
                 '<th scope="col" align="right">Fraction %</th>',
-                '</tr>'))
+                '</tr>',
+            ))
 
             for symbol, count, mass, fraction in c:
                 symbol = re.sub(r'^(\d+)(.+)', r'<sup>\1</sup>\2', symbol)
                 result.extend((
-                    '<tr><td>%s</td>' % symbol,
-                    '<td align="center">%i</td>' % count,
-                    '<td align="right">%.*f</td>' % (prec, mass),
-                    '<td align="right">%.4f</td></tr>' % (fraction * 100)))
+                    f'<tr><td>{symbol}</td>',
+                    f'<td align="center">{count}</td>',
+                    f'<td align="right">{mass:.{prec}f}</td>',
+                    f'<td align="right">{fraction * 100:.4f}</td></tr>',
+                ))
 
             count, mass, fraction = c.total
             result.extend((
                 '<tr><td><em>Total</em></td>',
-                '<td align="center"><em>%i</em></td>' % count,
-                '<td align="right"><em>%.*f</em></td>' % (prec, mass),
-                '<td align="right"><em>%.4f</em></td></tr>' % (fraction * 100),
-                '</table>'))
+                f'<td align="center"><em>{count}</em></td>',
+                f'<td align="right"><em>{mass:.{prec}f}</em></td>',
+                f'<td align="right"><em>{fraction * 100:.4f}</em></td>',
+                '</tr>',
+                '</table>',
+            ))
 
         if f.atoms < maxatoms:
             s = f.spectrum()
@@ -281,27 +291,32 @@ def analyze(formula, maxatoms=250):
                 result.extend((
                     '<h3>Mass Distribution</h3>',
                     '<p><strong>Most abundant mass</strong>: ',
-                    '%.*f (%.3f%%)</p>' % (prec, s.peak[0], s.peak[1] * 100),
-                    '<p><strong>Mean mass</strong>: %.*f</p>' % (prec, s.mean),
+                    f'{s.peak[0]:.{prec}f} ({s.peak[1] * 100:.3f}%)</p>',
+                    f'<p><strong>Mean mass</strong>: {s.mean:.{prec}}</p>',
                     '<table border="0" cellpadding="2">',
                     '<tr>',
                     '<th scope="col" align="left">Relative mass</th>',
                     '<th scope="col" align="right">Fraction %</th>',
                     '<th scope="col" align="right">Intensity</th>',
-                    '</tr>'))
+                    '</tr>',
+                ))
                 for mass, fraction in s.values():
                     result.extend((
-                        '<tr><td>%.*f</td>' % (prec, mass),
-                        '<td align="right">%.6f</td>' % (fraction * 100.0),
-                        '<td align="right">%.6f</td></tr>' % (fraction*norm)))
+                        f'<tr><td>{mass:.{prec}f}</td>',
+                        f'<td align="right">{fraction*100.:.6}</td>',
+                        f'<td align="right">{fraction*norm:.6}</td></tr>',
+                    ))
                 result.append('</table>')
 
-    except Exception as e:
-        e = str(e).splitlines()
-        text = e[0][0].upper() + e[0][1:]
-        details = '\n'.join(e[1:])
-        result.append('<h2>Error</h2><p>%s</p><pre>%s</pre>' % (
-            escape(text, True), escape(details, True)))
+    except Exception as exc:
+        exc = str(exc).splitlines()
+        text = exc[0][0].upper() + exc[0][1:]
+        details = '\n'.join(exc[1:])
+        result.append(
+            '<h2>Error</h2><p>{}</p><pre>{}</pre>'.format(
+                escape(text, True), escape(details, True)
+            )
+        )
 
     return '\n'.join(result)
 
@@ -321,15 +336,19 @@ def isotopes():
     rows = []
     for ele in molmass.ELEMENTS:
         rows.extend((
-            '<tr><td><em>%s</em></td>' % ele.name,
-            '<td align="right">%12.8f</td></tr>' % ele.mass))
+            f'<tr><td><em>{ele.name}</em></td>',
+            f'<td align="right">{ele.mass:12.8f}</td></tr>',
+        ))
         for massnumber in sorted(ele.isotopes):
             iso = ele.isotopes[massnumber]
             rows.extend((
-                '<tr><td align="right"><sup>%i</sup>%s</td>' % (
-                    massnumber, ele.symbol),
-                '<td align="right">%.8f</td>' % iso.mass,
-                '<td align="right">%.8f</td></tr>' % (iso.abundance * 100.0)))
+                '<tr>'
+                f'<td align="right"><sup>{massnumber}</sup>{ele.symbol}'
+                f'</td>',
+                f'<td align="right">{iso.mass:.8f}</td>',
+                f'<td align="right">{iso.abundance * 100.:.8f}</td>',
+                '</tr>',
+            ))
     return template.format(rows='\n'.join(rows))
 
 
@@ -345,29 +364,32 @@ def groups():
     {rows}
     </table>"""
     result = []
-    for group, title in ((molmass.GROUPS, 'Chemical Groups'),
-                         (molmass.AMINOACIDS, 'Amino Acids'),
-                         (molmass.DEOXYNUCLEOTIDES, 'Deoxynucleotides'),
-                         (molmass.NUCLEOTIDES, 'Nucleotides')):
+    for group, title in (
+        (molmass.GROUPS, 'Chemical Groups'),
+        (molmass.AMINOACIDS, 'Amino Acids'),
+        (molmass.DEOXYNUCLEOTIDES, 'Deoxynucleotides'),
+        (molmass.NUCLEOTIDES, 'Nucleotides'),
+    ):
         rows = []
         for key in sorted(group):
             value = group[key]
             if isinstance(value, str):
-                rows.append('<tr><td>%s</td><td>%s</td></tr>' % (key, value))
+                rows.append(f'<tr><td>{key}</td><td>{value}</td></tr>')
         result.append(template.format(title=title, rows='\n'.join(rows)))
     return '\n'.join(result)
 
 
-def main(url='http://localhost:9000/%s'):
+def main(url='http://localhost:9000/{}'):
     """Run web application in local web server."""
     import cgi
     import cgitb
+
     cgitb.enable()
 
     dirname, filename = os.path.split(__file__)
     if filename[-1] != 'y':
         filename = filename[:-1]  # don't use .pyc or .pyo
-    url = url % filename
+    url = url.format(filename)
     if dirname:
         os.chdir(dirname)
 
@@ -378,13 +400,8 @@ def main(url='http://localhost:9000/%s'):
         print(response(request, url))
     else:
         import webbrowser
-        if sys.version_info[0] == 2:
-            from urlparse import urlparse
-            from BaseHTTPServer import HTTPServer
-            from CGIHTTPServer import CGIHTTPRequestHandler
-        else:
-            from urllib.parse import urlparse
-            from http.server import HTTPServer, CGIHTTPRequestHandler
+        from urllib.parse import urlparse
+        from http.server import HTTPServer, CGIHTTPRequestHandler
 
         def is_cgi(self):
             """Monkey patch for CGIHTTPRequestHandler.is_cgi()."""
@@ -397,8 +414,9 @@ def main(url='http://localhost:9000/%s'):
         print('Serving CGI script at', url)
         webbrowser.open(url)
         url = urlparse(url)
-        HTTPServer((url.hostname, url.port),
-                   CGIHTTPRequestHandler).serve_forever()
+        HTTPServer(
+            (url.hostname, url.port), CGIHTTPRequestHandler
+        ).serve_forever()
 
 
 if __name__ == '__main__':
