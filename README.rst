@@ -20,16 +20,20 @@ For command line usage run ``python -m molmass --help``
 
 :Author: `Christoph Gohlke <https://www.lfd.uci.edu/~gohlke/>`_
 
-:Version: 2019.1.1
+:License: BSD 3-Clause
+
+:Version: 2020.1.1
 
 Requirements
 ------------
-* `CPython 2.7 or 3.5+ <https://www.python.org>`_
+* `CPython >= 3.6 <https://www.python.org>`_
 
 Revisions
 ---------
-2019.1.1
-    Update copyright year.
+2020.1.1
+    Update elements.py to version 2020.1.1.
+    Remove support for Python 2.7 and 3.5.
+    Update copyright.
 2018.8.15
     Move modules into molmass package.
 2018.5.29
@@ -49,20 +53,20 @@ Examples
 >>> f.empirical
 '[2H]2O'
 >>> f.mass  # average mass
-20.027603556
+20.02760855624
 >>> f.isotope.massnumber  # nominal mass
 20
 >>> f.isotope.mass  # monoisotopic mass
-20.0231181781
+20.02311817581
 >>> f.atoms
 3
 >>> print(f.composition())
 Element  Number  Relative mass  Fraction %
 2H            2       4.028204     20.1133
-O             1      15.999400     79.8867
-Total:        3      20.027604    100.0000
+O             1      15.999405     79.8867
+Total:        3      20.027609    100.0000
 >>> print(f.spectrum())
 Relative mass    Fraction %      Intensity
 20.023118         99.757000     100.000000
 21.027335          0.038000       0.038093
-22.027364          0.205000       0.205499
+22.027363          0.205000       0.205499
