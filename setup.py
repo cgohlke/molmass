@@ -40,6 +40,11 @@ setup(
     author='Christoph Gohlke',
     author_email='cgohlke@uci.edu',
     url='https://www.lfd.uci.edu/~gohlke/',
+    project_urls={
+        'Bug Tracker': 'https://github.com/cgohlke/molmass/issues',
+        'Source Code': 'https://github.com/cgohlke/molmass',
+        # 'Documentation': 'https://',
+    },
     packages=['molmass'],
     package_data={'molmass': ['icon.png']},
     entry_points={
@@ -64,5 +69,6 @@ setup(
         'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
     ],
 )
