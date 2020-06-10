@@ -35,16 +35,18 @@
 
 :License: BSD 3-Clause
 
-:Version: 2020.1.1
+:Version: 2020.6.10
 
 Requirements
 ------------
 * `CPython >= 3.6 <https://www.python.org>`_
-* `wxPython 4.0 <http://www.wxpython.org>`_
+* `wxPython 4.1 <http://www.wxpython.org>`_
 * `Elements.py 2019.1.1 <https://www.lfd.uci.edu/~gohlke/>`_
 
 Revisions
 ---------
+2020.6.10
+    Support wxPython 4.1.
 2019.1.1
     Require Python 3 and wxPython 4.
     Update copyright.
@@ -73,7 +75,7 @@ class MainApp(wx.App):
     """Main application."""
 
     name = 'Periodic Table of Elements'
-    version = '2020.1.1'
+    version = '2020.6.10'
     website = 'https://www.lfd.uci.edu/~gohlke/'
     copyright = (
         'Christoph Gohlke\n'
@@ -172,8 +174,8 @@ class MainFrame(wx.Frame):
         self.sizer.Add(
             self.table,
             1,
-            wx.LEFT | wx.TOP | wx.RIGHT | wx.EXPAND |
-            wx.ALIGN_CENTER_HORIZONTAL | wx.ADJUST_MINSIZE,
+            wx.LEFT | wx.TOP | wx.RIGHT | wx.EXPAND | wx.ADJUST_MINSIZE,
+            # wx.ALIGN_CENTER_HORIZONTAL |
             BORDER - 5,
         )
         self.sizer.Add((BORDER, BORDER))
@@ -181,7 +183,7 @@ class MainFrame(wx.Frame):
             self.notebook,
             0,
             wx.LEFT | wx.RIGHT | wx.BOTTOM | wx.EXPAND |
-            wx.ALIGN_CENTER_HORIZONTAL | wx.ALIGN_CENTER_VERTICAL |
+            # wx.ALIGN_CENTER_HORIZONTAL | wx.ALIGN_CENTER_VERTICAL |
             wx.ADJUST_MINSIZE,
             BORDER,
         )
@@ -896,8 +898,8 @@ class LabeledCtrl(wx.BoxSizer):
         self.Add(
             self.ctrl,
             1,
-            wx.LEFT | wx.EXPAND | wx.ALIGN_CENTER_VERTICAL | wx.ALIGN_RIGHT |
-            wx.ADJUST_MINSIZE,
+            wx.LEFT | wx.EXPAND | wx.ADJUST_MINSIZE,
+            # | wx.ALIGN_CENTER_VERTICAL | wx.ALIGN_RIGHT
             0,
         )
         if unit:
