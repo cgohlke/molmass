@@ -52,7 +52,7 @@ For command line usage run ``python -m molmass --help``
 
 :License: BSD 3-Clause
 
-:Version: 2020.1.1
+:Version: 2020.6.10
 
 Requirements
 ------------
@@ -60,6 +60,8 @@ Requirements
 
 Revisions
 ---------
+2020.6.10
+    Update elements_gui.py to version 2020.6.10.
 2020.1.1
     Update elements.py to version 2020.1.1.
     Remove support for Python 2.7 and 3.5.
@@ -103,7 +105,7 @@ Relative mass    Fraction %      Intensity
 
 """
 
-__version__ = '2020.1.1'
+__version__ = '2020.6.10'
 
 __all__ = (
     'analyze', 'Formula', 'FormulaError', 'Spectrum', 'Composition',
