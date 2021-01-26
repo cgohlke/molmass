@@ -121,9 +121,9 @@ import copy
 from functools import reduce
 
 try:
-    from .elements import ELEMENTS, Isotope
+    from .elements import ELEMENTS, Isotope, ELECTRON
 except ImportError:
-    from elements import ELEMENTS, Isotope
+    from elements import ELEMENTS, Isotope, ELECTRON
 
 
 def analyze(formula, maxatoms=250):
@@ -255,7 +255,23 @@ class Formula:
         """
         if not isinstance(other, Formula):
             raise TypeError('can only add Formula instance')
-        return Formula(f'({self})({other})')
+        charge = self.charge + other.charge
+        if charge == 0:
+            return Formula(f'({self.formula})({other.formula})')
+        elif charge == 1:
+            return Formula(f'({self.formula})({other.formula})+')
+        elif charge == -1:
+            return Formula(f'({self.formula})({other.formula})-')
+        elif charge > 0:
+            return Formula(f'({self.formula})({other.formula})_{charge}+')
+        elif charge < 0:
+            return Formula(f'({self.formula})({other.formula})_{-charge}-')
+            
+    def __radd__(self, other):
+        if other == 0:
+            return self
+        else:
+            return self.__add__(other)
 
     def __sub__(self, other):
         """Subtract elements of other formula and return as new Formula.
@@ -307,7 +323,7 @@ class Formula:
         if not formula:
             raise FormulaError('empty formula', formula, 0)
 
-        validchars = set('([{<123456789ABCDEFGHIKLMNOPRSTUVWXYZ')
+        validchars = set('([{<123456789ABCDEFGHIKLMNOPRSTUVWXYZ_+-')
 
         if not formula[0] in validchars:
             raise FormulaError(
@@ -322,6 +338,7 @@ class Formula:
         level = 0     # parenthesis level
         counts = [1]  # parenthesis level multiplication
         i = len(formula)
+        charge_mode = False
         while i:
             i -= 1
             char = formula[i]
@@ -334,6 +351,7 @@ class Formula:
                         "missing closing parenthesis ')]}>'", formula, i
                     )
             elif char in ')]}>':
+                charge_mode = False
                 if num == 0:
                     num = 1
                 level += 1
@@ -341,13 +359,18 @@ class Formula:
                     counts.append(0)
                 counts[level] = num * counts[level - 1]
                 num = 0
+            elif char in "+-":
+                charge_mode = True
             elif char.isdigit():
                 j = i
                 while i and formula[i - 1].isdigit():
                     i -= 1
-                num = int(formula[i:j + 1])
+                if charge_mode:
+                    num = 1
+                else:
+                    num = int(formula[i:j + 1])
                 if num == 0:
-                    raise FormulaError('count is zero', formula, i)
+                    raise FormulaError("count is zero", formula, i)
             elif char.islower():
                 if not formula[i - 1].isupper():
                     raise FormulaError(
@@ -398,6 +421,33 @@ class Formula:
             raise FormulaError('invalid formula', formula, 0)
 
         return elements
+    
+    @lazyattr
+    def charge(self):
+        """Return formula charge.
+
+        Examples
+        --------
+        >>> Formula("C8H14Br4+H+").charge
+        1
+        >>> Formula("C8H14Br4+-").charge
+        0
+        >>> Formula("C14H17N2O_-").charge
+        -1
+        >>> Formula("C56H75I4N13O2Pt2++").charge
+        2
+        >>> Formula("C56H75I4N13O2Pt2_2+").charge
+        2
+
+        """
+        charge = 0
+        m = re.search("\]{1,}([0-9]*)([+-]{1,})$", self._formula)
+        if m:
+            if m.groups()[0] == '':
+                charge = int("%s1" % m.groups()[1])
+            else:
+                charge = int("%s%s" % (m.groups()[1], m.groups()[0]))
+        return charge
 
     @lazyattr
     def formula(self):
@@ -463,6 +513,27 @@ class Formula:
         return gcd(
             {list(i)[0] for i in (j.values() for j in self._elements.values())}
         )
+        
+    @lazyattr
+    def mz(self):
+        """Return molecular mass corrected by ion charge.
+
+        Examples
+        --------
+        >>> def _(mass):
+        ...    print(f'{mass:.4f}')
+        >>> _(Formula('H').mz)
+        1.0079
+        >>> _(Formula('H+').mz)
+        1.0074
+        >>> _(Formula('SO4_2-').mz)
+        48.0318
+
+        """        
+        if self.charge != 0:
+            return (self.mass - ELECTRON.mass * self.charge) / abs(self.charge)
+            
+        return self.mass
 
     @lazyattr
     def mass(self):
@@ -489,6 +560,7 @@ class Formula:
                     result += ele.isotopes[massnumber].mass * count
                 else:
                     result += ele.mass * count
+                    
         return result
 
     @lazyattr
@@ -505,7 +577,7 @@ class Formula:
         1440, 1439.5890, 0.205075%
 
         """
-        result = Isotope()
+        result = Isotope(charge=self.charge)
         for symbol in self._elements:
             ele = ELEMENTS[symbol]
             for massnumber, count in self._elements[symbol].items():
@@ -516,6 +588,7 @@ class Formula:
                 result.mass += isotope.mass * count
                 result.massnumber += isotope.massnumber * count
                 result.abundance *= isotope.abundance ** count
+                
         return result
 
     def composition(self, isotopic=True):
@@ -638,7 +711,48 @@ class Formula:
                                     s[1] += f
                                 else:
                                     spectrum[k] = [m, f]
+                                    
         return Spectrum(spectrum)
+        
+    def mz_spectrum(self, minfract=1e-9, isotope_threshold=1e-3):
+        """Return low resolution mz spectrum as Spectrum instance.
+
+        Return type is dict{massnumber: list[mz, percentage_of_maximum]}.
+
+        Examples
+        --------
+        >>> def _(spectrum):
+        ...     for key, val in spectrum.items():
+        ...         print(f'{key}, {val[0]:.6f}, {val[1]:.3f}%')
+        >>> _(Formula("C16H31O2-").mz_spectrum())
+        255, 255.232954, 100.000%
+        256, 256.236371, 17.738%
+        257, 257.239232, 1.891%
+        258, 258.241960, 0.150%
+        259, 259.244718, 0.009%
+        >>> _(Formula("[C53H100NO6]+").mz_spectrum())
+        846, 846.754516, 100.000%
+        847, 847.757892, 59.067%
+        848, 848.761101, 18.367%
+        849, 849.764189, 3.981%
+        850, 850.767191, 0.672%
+        851, 851.770133, 0.094%
+        852, 852.773030, 0.011%
+        853, 853.775896, 0.001%
+        """
+        spectrum = self.spectrum(minfract=minfract)
+        mz_spectrum = {}
+        
+        max_intensity = max([val[1] for val in spectrum.values()])
+        
+        # Correct mass with charge
+        for key, val in spectrum.items():
+            percentage = val[1] / max_intensity * 100.
+            if percentage >= isotope_threshold:
+                mz = (val[0] - ELECTRON.mass * self.charge) / abs(self.charge) if self.charge != 0 else val[0]
+                mz_spectrum[key] = [mz, percentage]
+            
+        return Spectrum(mz_spectrum)
 
 
 class Spectrum(dict):
@@ -798,6 +912,16 @@ def from_string(formula, groups=None):
     '((C10H12N5O5P)(C9H12N3O6P)H2O)'
     >>> from_string('peptide(GG)')
     '((C2H3NO)2H2O)'
+    >>> from_string("C8H14Br4+H+")
+    '[C8H14Br4H]+'
+    >>> from_string("C8H14Br4+-")
+    'C8H14Br4'
+    >>> from_string("C14H17N2O_-")
+    '[C14H17N2O]-'
+    >>> from_string("C56H75I4N13O2Pt2++")
+    '[C56H75I4N13O2Pt2]2+'
+    >>> from_string("C56H75I4N13O2Pt2_2+")
+    '[C56H75I4N13O2Pt2]2+'
 
     """
     try:
@@ -839,6 +963,38 @@ def from_string(formula, groups=None):
 
     # Deuterium
     formula = re.sub('(D)(?![a-z])', '[2H]', formula)
+    
+    # Charge
+    charge = 0
+    m = re.search("([\]_]{1,})([0-9]{1,})([+-]{1,})$", formula)
+    if m:
+        if m.groups()[1] == '':
+            charge = int("%s1" % m.groups()[2])
+        else:
+            charge = int("%s%s" % (m.groups()[2], m.groups()[1]))
+        if m.groups()[0] == "_":
+            formula = formula.split("_")[0]
+        elif m.groups()[0] == "":
+            formula = formula.strip(m.groups()[2])
+        elif m.groups()[0] == "]":
+            formula = formula.split("]")[0] + "]"
+    else:
+        m = re.search("([\]_]?)([+-]{1,})$", formula)
+        charge = 0
+        if m:
+            for char in m.groups()[1]:
+                if char == "+":
+                    charge += 1
+                elif char == "-":
+                    charge -= 1
+            if m.groups()[0] == "_":
+                formula = formula.split("_")[0]
+            elif m.groups()[0] == "":
+                formula = formula.strip(m.groups()[1])
+            elif m.groups()[0] == "]":
+                formula = formula.split("]")[0] + "]"
+    if formula.startswith("[") and formula.endswith("]"):
+        formula = formula.strip("[").strip("]")
 
     # arithmetic
     formula = formula.replace('.', '+')
@@ -850,6 +1006,10 @@ def from_string(formula, groups=None):
         formula = formula.replace('+', '')
     if '-' in formula:
         FormulaError('subtraction not supported yet')
+        
+    #Charge
+    if charge != 0:
+        formula = '[%s]%s%s'% (formula, abs(charge) if abs(charge)>1 else "", "+" if charge>0 else "-")
 
     return formula
 

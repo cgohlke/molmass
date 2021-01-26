@@ -111,6 +111,22 @@ class lazyattr:
             return getattr(super(owner, instance), self.func.__name__)
         setattr(instance, self.func.__name__, result)
         return result
+        
+        
+class Particle(object):
+    """Particle like electron of proton
+    
+    Attributes
+    ----------
+    mass : float
+        Relative mass. Ratio of the average mass of atoms
+        of the element to 1/12 of the mass of an atom of 12C
+    charge : float
+        charge in Coulombs.
+    """
+    
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
 
 
 class Element:
@@ -347,21 +363,39 @@ class Element:
 class Isotope:
     """Isotope massnumber, relative atomic mass, and abundance."""
 
-    __slots__ = ('massnumber', 'mass', 'abundance')
+    __slots__ = ('massnumber', 'mass', 'abundance', 'charge')
 
-    def __init__(self, mass=0.0, abundance=1.0, massnumber=0):
+    def __init__(self, mass=0.0, abundance=1.0, massnumber=0, charge=0):
         self.mass = mass
         self.abundance = abundance
         self.massnumber = massnumber
+        self.charge = charge
+        
+    @property
+    def mz(self):
+        """Return monoisotopic mass corrected by ion charge."""
+        if self.charge != 0:
+            return (self.mass - ELECTRON.mass * self.charge) / abs(self.charge)
+        return self.mass
 
     def __str__(self):
-        return '{}, {:.4f}, {:.6f}%'.format(
+        s = '{}, {:.4f}, {:.6f}%'.format(
             self.massnumber, self.mass, self.abundance * 100
         )
+        if self.charge == 1:
+            s += ', +'
+        elif self.charge == -1:
+            s += ', -'
+        elif self.charge > 0:
+            s += ', {}+'.format(self.charge)
+        elif self.charge < 0:
+            s += ', {}-'.format(-self.charge)
+            
+        return s
 
     def __repr__(self):
-        return 'Isotope({}, {}, {})'.format(
-            repr(self.mass), repr(self.abundance), repr(self.massnumber)
+        return 'Isotope({}, {}, {}, {})'.format(
+            repr(self.mass), repr(self.abundance), repr(self.massnumber), repr(self.charge)
         )
 
 
@@ -2087,6 +2121,12 @@ ELEMENTS = Elements(
         isotopes={276: Isotope(276.15159, 1.0, 276)},
     ),
 )
+
+e = 1.602176634e-19 # Elementary charge in Coulombs
+ELECTRON = Particle(mass=5.48579909065e-4, charge=-e)
+PROTON = Particle(mass=1.007276466621, charge=+e)
+NEUTRON = Particle(mass=1.00866491595, charge=0.)
+POSITRON = POSITON = ANTIELECTRON = Particle(mass=5.48579909065e-4, charge=+e)
 
 PERIODS = {1: 'K', 2: 'L', 3: 'M', 4: 'N', 5: 'O', 6: 'P', 7: 'Q'}
 
