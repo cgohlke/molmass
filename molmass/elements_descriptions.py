@@ -5,7 +5,6 @@
 
 def elements_descriptions(elements, symbol=None):
     """Set the description attribute on all elements."""
-
     elements['H'].description = (
         "Colourless, odourless gaseous chemical element. Lightest and most "
         "abundant element in the universe. Present in water and in all "
