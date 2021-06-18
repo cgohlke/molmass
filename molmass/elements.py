@@ -1,6 +1,6 @@
 # elements.py
 
-# Copyright (c) 2005-2020, Christoph Gohlke
+# Copyright (c) 2005-2021, Christoph Gohlke
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -38,14 +38,17 @@ and descriptive properties of the elements are stored as instance attributes.
 
 :License: BSD 3-Clause
 
-:Version: 2020.1.1
+:Version: 2021.6.18
 
 Requirements
 ------------
-* `CPython >= 3.6 <https://www.python.org>`_
+* `CPython >= 3.7 <https://www.python.org>`_
 
 Revisions
 ---------
+2021.6.18
+    Remove support for Python 3.6 (NEP 29).
+    Add Particle types (#5).
 2020.1.1
     Update atomic weights and isotopic compositions from NIST.
     Move element descriptions into separate module.
@@ -92,25 +95,76 @@ Examples
 
 """
 
-__version__ = '2020.1.1'
+__version__ = '2021.6.18'
 
-__all__ = ('ELEMENTS', 'Element', 'Isotope', 'sqlite_script')
+__all__ = (
+    'ELEMENTS',
+    'Element',
+    'Isotope',
+    'Particle',
+    'ELEMENTARY_CHARGE',
+    'ELECTRON',
+    'PROTON',
+    'NEUTRON',
+    'POSITRON',
+    'sqlite_script',
+)
 
 
 class lazyattr:
-    """Lazy object attribute whose value is computed on first access."""
+    """Attribute whose value is computed on first access.
 
-    __slots__ = ('func',)
+    Lazyattrs are not thread-safe.
+
+    """
+
+    # TODO: replace with functools.cached_property? requires Python >= 3.8
+    __slots__ = ('func', '__dict__')
 
     def __init__(self, func):
+        """Initialize instance from decorated function."""
         self.func = func
+        self.__doc__ = func.__doc__
+        self.__module__ = func.__module__
+        self.__name__ = func.__name__
+        self.__qualname__ = func.__qualname__
+        # self.lock = threading.RLock()
 
     def __get__(self, instance, owner):
-        result = self.func(instance)
-        if result is NotImplemented:
+        # with self.lock:
+        if instance is None:
+            return self
+        try:
+            value = self.func(instance)
+        except AttributeError as exc:
+            raise RuntimeError(exc)
+        if value is NotImplemented:
             return getattr(super(owner, instance), self.func.__name__)
-        setattr(instance, self.func.__name__, result)
-        return result
+        setattr(instance, self.func.__name__, value)
+        return value
+
+
+class Particle:
+    """Particle, e.g. electron, proton, or neutron.
+
+    Attributes
+    ----------
+    name : str
+        Name in English.
+    mass : float
+        Relative mass. Ratio of the average mass of atoms of the particle
+        to 1/12 of the mass of an atom of 12C.
+    charge : float
+        Electric charge in coulomb.
+
+    """
+
+    __slots__ = ('name', 'mass', 'charge')
+
+    def __init__(self, name, mass, charge):
+        self.name = name
+        self.mass = float(mass)
+        self.charge = float(charge)
 
 
 class Element:
@@ -150,7 +204,7 @@ class Element:
         Electronegativity (Pauling scale).
     covrad : float
         Covalent radius in Angstrom.
-    atmrad :
+    atmrad : float
         Atomic radius in Angstrom.
     vdwrad : float
         Van der Waals radius in Angstrom.
@@ -236,20 +290,22 @@ class Element:
         else:
             isotopes = f'{{{isotopes}}},'
 
-        return ',\n    '.join((
-            f"Element(\n    {self.number}, '{self.symbol}', '{self.name}'",
-            f"group={self.group}, period={self.period},"
-            f" block='{self.block}', series={self.series}",
-            f"mass={self.mass}, eleneg={self.eleneg},"
-            f" eleaffin={self.eleaffin}",
-            f"covrad={self.covrad}, atmrad={self.atmrad},"
-            f" vdwrad={self.vdwrad}",
-            f"tboil={self.tboil}, tmelt={self.tmelt}, density={self.density}",
-            f"eleconfig='{self.eleconfig}'",
-            f"oxistates='{self.oxistates}'",
-            f"ionenergy={ionenergy}",
-            f"isotopes={isotopes}\n)"
-        ))
+        return ',\n    '.join(
+            (
+                f"Element(\n    {self.number}, '{self.symbol}', '{self.name}'",
+                f"group={self.group}, period={self.period},"
+                f" block='{self.block}', series={self.series}",
+                f"mass={self.mass}, eleneg={self.eleneg},"
+                f" eleaffin={self.eleaffin}",
+                f"covrad={self.covrad}, atmrad={self.atmrad},"
+                f" vdwrad={self.vdwrad}",
+                f"tboil={self.tboil}, tmelt={self.tmelt}, density={self.density}",
+                f"eleconfig='{self.eleconfig}'",
+                f"oxistates='{self.oxistates}'",
+                f"ionenergy={ionenergy}",
+                f"isotopes={isotopes}\n)",
+            )
+        )
 
     @lazyattr
     def nominalmass(self):
@@ -279,7 +335,7 @@ class Element:
         if self.eleconfig.startswith('['):
             base = self.eleconfig.split(' ', 1)[0][1:-1]
             adict.update(ELEMENTS[base].eleconfig_dict)
-        for e in self.eleconfig.split()[bool(adict):]:
+        for e in self.eleconfig.split()[bool(adict) :]:
             adict[(int(e[0]), e[1])] = int(e[2:]) if len(e) > 2 else 1
         return adict
 
@@ -413,6 +469,7 @@ class Elements:
                 raise KeyError
 
 
+# fmt: off
 ELEMENTS = Elements(
     Element(
         1, 'H', 'Hydrogen',
@@ -2087,6 +2144,14 @@ ELEMENTS = Elements(
         isotopes={276: Isotope(276.15159, 1.0, 276)},
     ),
 )
+# fmt: on
+
+ELEMENTARY_CHARGE = 1.602176634e-19
+
+ELECTRON = Particle('Electron', 5.48579909065e-4, -ELEMENTARY_CHARGE)
+PROTON = Particle('Proton', 1.007276466621, ELEMENTARY_CHARGE)
+NEUTRON = Particle('Neutron', 1.00866491595, 0.0)
+POSITRON = Particle('Positron', 5.48579909065e-4, ELEMENTARY_CHARGE)
 
 PERIODS = {1: 'K', 2: 'L', 3: 'M', 4: 'N', 5: 'O', 6: 'P', 7: 'Q'}
 
@@ -2240,7 +2305,9 @@ def sqlite_script():
     for ele in ELEMENTS:
         descr = word_wrap(
             ele.description.replace("'", "\'\'").replace("\"", "\"\""),
-            linelen=74, indent=0, joinstr="\n "
+            linelen=74,
+            indent=0,
+            joinstr='\n ',
         )
         sql.append(
             f"""INSERT INTO "element" VALUES (
