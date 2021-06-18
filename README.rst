@@ -11,7 +11,7 @@ deficiency due to chemical bonding is not taken into account.
 
 Examples of valid formulas are ``H2O``, ``[2H]2O``, ``CH3COOH``, ``EtOH``,
 ``CuSO4.5H2O``, ``(COOH)2``, ``AgCuRu4(H)2[CO]12{PPh3}2``, ``CGCGAATTCGCG``,
-and ``MDRGEQGLLK``.
+``MDRGEQGLLK``, and ``O: 0.26, 30Si: 0.74``.
 
 Formulas are case sensitive and ``+`` denotes the arithmetic operator,
 not an ion charge.
@@ -22,20 +22,24 @@ For command line usage run ``python -m molmass --help``
 
 :License: BSD 3-Clause
 
-:Version: 2020.6.10
+:Version: 2021.6.18
 
 Requirements
 ------------
-* `CPython >= 3.6 <https://www.python.org>`_
+* `CPython >= 3.7 <https://www.python.org>`_
 
 Revisions
 ---------
+2021.6.18
+    Remove support for Python 3.6 (NEP 29).
+    Add Particle types to elements.py (#5).
+    Fix molmass_web.py failure on WSL2 (#9).
+    Fix elements_gui.py layout issue.
 2020.6.10
     Update elements_gui.py to version 2020.6.10.
 2020.1.1
     Update elements.py to version 2020.1.1.
     Remove support for Python 2.7 and 3.5.
-    Update copyright.
 2018.8.15
     Move modules into molmass package.
 2018.5.29
