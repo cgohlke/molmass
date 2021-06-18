@@ -1,6 +1,6 @@
 # molmass.py
 
-# Copyright (c) 1990-2020, Christoph Gohlke
+# Copyright (c) 1990-2021, Christoph Gohlke
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -41,7 +41,7 @@ deficiency due to chemical bonding is not taken into account.
 
 Examples of valid formulas are ``H2O``, ``[2H]2O``, ``CH3COOH``, ``EtOH``,
 ``CuSO4.5H2O``, ``(COOH)2``, ``AgCuRu4(H)2[CO]12{PPh3}2``, ``CGCGAATTCGCG``,
-and ``MDRGEQGLLK``.
+``MDRGEQGLLK``, and ``O: 0.26, 30Si: 0.74``.
 
 Formulas are case sensitive and ``+`` denotes the arithmetic operator,
 not an ion charge.
@@ -52,20 +52,24 @@ For command line usage run ``python -m molmass --help``
 
 :License: BSD 3-Clause
 
-:Version: 2020.6.10
+:Version: 2021.6.18
 
 Requirements
 ------------
-* `CPython >= 3.6 <https://www.python.org>`_
+* `CPython >= 3.7 <https://www.python.org>`_
 
 Revisions
 ---------
+2021.6.18
+    Remove support for Python 3.6 (NEP 29).
+    Add Particle types to elements.py (#5).
+    Fix molmass_web.py failure on WSL2 (#9).
+    Fix elements_gui.py layout issue.
 2020.6.10
     Update elements_gui.py to version 2020.6.10.
 2020.1.1
     Update elements.py to version 2020.1.1.
     Remove support for Python 2.7 and 3.5.
-    Update copyright.
 2018.8.15
     Move modules into molmass package.
 2018.5.29
@@ -105,13 +109,27 @@ Relative mass    Fraction %      Intensity
 
 """
 
-__version__ = '2020.6.10'
+__version__ = '2021.6.18'
 
 __all__ = (
-    'analyze', 'Formula', 'FormulaError', 'Spectrum', 'Composition',
-    'test', 'main', 'from_fractions', 'from_elements', 'from_oligo',
-    'from_peptide', 'from_sequence', 'from_string', 'hill_sorted',
-    'GROUPS', 'AMINOACIDS', 'DEOXYNUCLEOTIDES', 'PREPROCESSORS'
+    'analyze',
+    'Formula',
+    'FormulaError',
+    'Spectrum',
+    'Composition',
+    'test',
+    'main',
+    'from_fractions',
+    'from_elements',
+    'from_oligo',
+    'from_peptide',
+    'from_sequence',
+    'from_string',
+    'hill_sorted',
+    'GROUPS',
+    'AMINOACIDS',
+    'DEOXYNUCLEOTIDES',
+    'PREPROCESSORS',
 )
 
 import sys
@@ -146,9 +164,12 @@ def analyze(formula, maxatoms=250):
         prec = precision_digits(f.mass, 9)
         if f.mass != f.isotope.mass:
             result.append(f'\nAverage mass: {f.mass:.{prec}f}')
-        result.extend((
-            f'Monoisotopic mass: {f.isotope.mass:.{prec}f}',
-            f'Nominal mass: {f.isotope.massnumber}'))
+        result.extend(
+            (
+                f'Monoisotopic mass: {f.isotope.mass:.{prec}f}',
+                f'Nominal mass: {f.isotope.massnumber}',
+            )
+        )
 
         c = f.composition()
         if len(c) > 1:
@@ -157,13 +178,15 @@ def analyze(formula, maxatoms=250):
         if f.atoms < maxatoms:
             s = f.spectrum()
             if len(s) > 1:
-                result.extend((
-                    '\nMass Distribution',
-                    f'\nMost abundant mass: {s.peak[0]:.{prec}f} '
-                    f'({s.peak[1] * 100:.3f}%)',
-                    f'Mean mass: {s.mean:.{prec}f}\n',
-                    str(s)
-                ))
+                result.extend(
+                    (
+                        '\nMass Distribution',
+                        f'\nMost abundant mass: {s.peak[0]:.{prec}f} '
+                        f'({s.peak[1] * 100:.3f}%)',
+                        f'Mean mass: {s.mean:.{prec}f}\n',
+                        str(s),
+                    )
+                )
 
     except Exception as exc:
         result.append(f'Error: {exc}')
@@ -172,27 +195,36 @@ def analyze(formula, maxatoms=250):
 
 
 class lazyattr:
-    """Lazy object attribute whose value is computed on first access."""
+    """Attribute whose value is computed on first access.
+
+    Lazyattrs are not thread-safe.
+
+    """
+
+    # TODO: replace with functools.cached_property? requires Python >= 3.8
+    __slots__ = ('func', '__dict__')
 
     def __init__(self, func):
+        """Initialize instance from decorated function."""
         self.func = func
-        # crude hack to keep docstrings and allow doctests
-        if func.__doc__:
-            self.__doc__ = func.__doc__
-            lazyattr.docstrings.__doc__ += '\n\n' + func.__doc__
+        self.__doc__ = func.__doc__
+        self.__module__ = func.__module__
+        self.__name__ = func.__name__
+        self.__qualname__ = func.__qualname__
+        # self.lock = threading.RLock()
 
     def __get__(self, instance, owner):
+        # with self.lock:
         if instance is None:
             return self
-        result = self.func(instance)
-        if result is NotImplemented:
+        try:
+            value = self.func(instance)
+        except AttributeError as exc:
+            raise RuntimeError(exc)
+        if value is NotImplemented:
             return getattr(super(owner, instance), self.func.__name__)
-        setattr(instance, self.func.__name__, result)
-        return result
-
-    @staticmethod
-    def docstrings():
-        """Docstrings of lazy attributes get appended to this string."""
+        setattr(instance, self.func.__name__, value)
+        return value
 
 
 class Formula:
@@ -317,9 +349,9 @@ class Formula:
         validchars |= set(']})>0abcdefghiklmnoprstuy')
 
         elements = {}
-        ele = ''      # parsed element
-        num = 0       # number
-        level = 0     # parenthesis level
+        ele = ''  # parsed element
+        num = 0  # number
+        level = 0  # parenthesis level
         counts = [1]  # parenthesis level multiplication
         i = len(formula)
         while i:
@@ -345,13 +377,14 @@ class Formula:
                 j = i
                 while i and formula[i - 1].isdigit():
                     i -= 1
-                num = int(formula[i:j + 1])
+                num = int(formula[i : j + 1])
                 if num == 0:
                     raise FormulaError('count is zero', formula, i)
             elif char.islower():
                 if not formula[i - 1].isupper():
                     raise FormulaError(
-                        f"unexpected character '{char}'", formula, i)
+                        f"unexpected character '{char}'", formula, i
+                    )
                 ele = char
             elif char.isupper():
                 ele = char + ele
@@ -392,7 +425,8 @@ class Formula:
 
         if level != 0:
             raise FormulaError(
-                "missing opening parenthesis '([{<'", formula, 0)
+                "missing opening parenthesis '([{<'", formula, 0
+            )
 
         if not elements:
             raise FormulaError('invalid formula', formula, 0)
@@ -821,7 +855,8 @@ def from_string(formula, groups=None):
                 fractions[item[0].strip()] = float(item[1].strip())
         except Exception as exc:
             raise FormulaError(
-                'invalid list of mass fractions', formula) from exc
+                'invalid list of mass fractions', formula
+            ) from exc
         return from_fractions(fractions)
 
     # oligos and peptides
@@ -926,7 +961,8 @@ def from_fractions(fractions, maxcount=10, precision=1e-4):
                 mass = ELEMENTS[symbol].isotopes[massnum].mass
             except KeyError as exc:
                 raise FormulaError(
-                    f"unknown isotope '[{massnum}{symbol}]'") from exc
+                    f"unknown isotope '[{massnum}{symbol}]'"
+                ) from exc
             symbol = f'[{massnum}{symbol}]'
         numbers[symbol] = fraction / (sumfractions * mass)
 
@@ -958,7 +994,9 @@ def from_fractions(fractions, maxcount=10, precision=1e-4):
 
 
 def from_sequence(sequence, items):
-    """Translate sequence using items dict and return histogram of items in
+    """Return translated sequence as formula string.
+
+    Translate sequence using items dict and return histogram of items in
     translated sequence as formula string.
 
     Raise KeyError if a sequence item is not in items.
@@ -1272,10 +1310,6 @@ PREPROCESSORS = {
 
 def test(verbose=False):
     """Test the module and the examples in docstrings."""
-    import doctest
-
-    doctest.testmod(verbose=verbose)
-
     # these formulas should pass
     for data in [
         (''.join(e.symbol for e in ELEMENTS), '', 14693.181589000998),
@@ -1290,8 +1324,6 @@ def test(verbose=False):
         ('Ph(CO)C(CH3)3', 'C11H14O', 162.23156),
         ('HGlyGluTyrOH', 'C16H21N3O7', 367.35864),
         ('HCysTyrIleGlnAsnCysProLeuNH2', 'C41H65N11O11S2', 952.1519),
-        ('HCysp(Trt)Tyrp(Tbu)IleGlnp(Trt)Asnp(Trt)ProLeuGlyNH2',
-         'C101H113N11O11S', 1689.13532),
         ('CGCGAATTCGCG', 'C116H148N46O73P12', 3726.4),
         ('MDRGEQGLLK', 'C47H83N15O16S', 1146.3),
         ('CDCl3', 'C[2H]Cl3', 120.384),
@@ -1301,6 +1333,11 @@ def test(verbose=False):
         ('PhNH2.HCl', 'C6H8ClN', 129.5892),
         ('NH3.BF3', 'BF3H3N', 84.8357),
         ('CuSO4.5H2O', 'CuH10O9S', 249.68),
+        (
+            'HCysp(Trt)Tyrp(Tbu)IleGlnp(Trt)Asnp(Trt)ProLeuGlyNH2',
+            'C101H113N11O11S',
+            1689.13532,
+        ),
     ]:
         if verbose:
             print(f"Trying Formula('{data[0]}') ...", end='')
@@ -1331,8 +1368,23 @@ def test(verbose=False):
 
     # these formulas are expected to fail
     for data in [
-        '', '()', '2', 'a', '(a)', 'C:H', 'H:', 'C[H', 'H)2',
-        'A', 'Aa', '2lC', '1C', '[11C]', 'H0', '()0', '(H)0C',
+        '',
+        '()',
+        '2',
+        'a',
+        '(a)',
+        'C:H',
+        'H:',
+        'C[H',
+        'H)2',
+        'A',
+        'Aa',
+        '2lC',
+        '1C',
+        '[11C]',
+        'H0',
+        '()0',
+        '(H)0C',
         'Ox: 0.26, 30Si: 0.74',
     ]:
         if verbose:
@@ -1362,13 +1414,30 @@ def main(argv=None):
         usage='usage: %prog [options] formula',
         description=search_doc('\n\n([^|]*?)\n\n', ''),
         version='%prog {}'.format(search_doc(':Version: (.*)', 'Unknown')),
-        prog='molmass'
+        prog='molmass',
     )
     opt = parser.add_option
-    opt('--web', dest='web', action='store_true', default=False,
-        help='start web application and open it in a web browser')
-    opt('--test', dest='test', action='store_true', default=False,
-        help='test the module')
+    opt(
+        '--web',
+        dest='web',
+        action='store_true',
+        default=False,
+        help='start web application and open it in a web browser',
+    )
+    opt(
+        '--test',
+        dest='test',
+        action='store_true',
+        default=False,
+        help='test the module',
+    )
+    opt(
+        '--doctest',
+        dest='doctest',
+        action='store_true',
+        default=False,
+        help='run the internal tests',
+    )
     opt('-v', '--verbose', dest='verbose', action='store_true', default=False)
 
     settings, formula = parser.parse_args()
@@ -1380,6 +1449,11 @@ def main(argv=None):
             import molmass_web  # noqa: delayed import
 
         return molmass_web.main()
+    if settings.doctest:
+        import doctest
+
+        doctest.testmod()
+        return 0
     if settings.test:
         test(settings.verbose)
         return 0
