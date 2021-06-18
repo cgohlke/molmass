@@ -1,6 +1,7 @@
+#!/usr/bin/env python3
 # molmass_web.py
 
-# Copyright (c) 2005-2020, Christoph Gohlke
+# Copyright (c) 2005-2021, Christoph Gohlke
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -31,24 +32,15 @@
 
 """Molecular Mass Calculator - A simple web interface for molmass.py.
 
-Run ``python molmass_web.py`` to execute the script in a local web server.
-
-:Author: `Christoph Gohlke <https://www.lfd.uci.edu/~gohlke/>`_
-
-:License: BSD 3-Clause
-
-:Version: 2020.1.1
-
-Requirements
-------------
-* `CPython >= 3.6 <https://www.python.org>`_
-* `Molmass.py 2020.1.1 <https://www.lfd.uci.edu/~gohlke/>`_
+Run ``python -m molmass --web`` to execute the script in a local web server.
 
 Revisions
 ---------
+2021.6.18
+    Link to source code on GitHub.
+    Fix failures on WSL2 (#9).
 2020.1.1
     Remove support for Python 2.7 and 3.5.
-    Update copyright.
 2018.8.15
     Move module into molmass package.
 2018.5.29
@@ -69,7 +61,7 @@ Revisions
 
 """
 
-__version__ = '2020.1.1'
+__version__ = '2021.6.18'
 
 import os
 import re
@@ -184,8 +176,8 @@ The entire risk as to the quality and performance is with you.</p>
 <h3>About</h3>
 <p>Molecular Mass Calculator version {version} by
 <a href="https://www.lfd.uci.edu/~gohlke/">Christoph Gohlke</a>.
-Source code is available at
-<a href="https://pypi.org/project/molmass/">pypi.org</a>.</p>
+Source code is available on
+<a href="https://github.com/cgohlke/molmass">GitHub</a>.</p>
 </div>"""
 
 
@@ -211,7 +203,7 @@ def response(form, url, template=PAGE, help=HELP, heads=''):
         url=url,
         version=__version__,
         content=content,
-        heads=heads.strip()
+        heads=heads.strip(),
     )
 
 
@@ -223,9 +215,7 @@ def analyze(formula, maxatoms=250):
         formula = re.sub(
             r'\[(\d+)([A-Za-z]{1,2})\]', r'<sup>\1</sup>\2', formula
         )
-        formula = re.sub(
-            r'([A-Za-z]{1,2})(\d+)', r'\1<sub>\2</sub>', formula
-        )
+        formula = re.sub(r'([A-Za-z]{1,2})(\d+)', r'\1<sub>\2</sub>', formula)
         return formula
 
     result = []
@@ -245,67 +235,79 @@ def analyze(formula, maxatoms=250):
             result.append(
                 f'<p><strong>Average mass</strong>: {f.mass:.{prec}f}</p>'
             )
-        result.extend((
-            f'<p><strong>Monoisotopic mass</strong>:'
-            f' {f.isotope.mass:.{prec}f}</p>',
-            f'<p><strong>Nominal mass</strong>:'
-            f' {f.isotope.massnumber}</p>',
-        ))
+        result.extend(
+            (
+                f'<p><strong>Monoisotopic mass</strong>:'
+                f' {f.isotope.mass:.{prec}f}</p>',
+                f'<p><strong>Nominal mass</strong>:'
+                f' {f.isotope.massnumber}</p>',
+            )
+        )
 
         c = f.composition()
         if len(c) > 1:
-            result.extend((
-                '<h3>Elemental Composition</h3>'
-                '<table border="0" cellpadding="2">',
-                '<tr>',
-                '<th scope="col" align="left">Element</th>',
-                '<th scope="col" align="right">Number</th>',
-                '<th scope="col" align="right">Relative mass</th>',
-                '<th scope="col" align="right">Fraction %</th>',
-                '</tr>',
-            ))
+            result.extend(
+                (
+                    '<h3>Elemental Composition</h3>'
+                    '<table border="0" cellpadding="2">',
+                    '<tr>',
+                    '<th scope="col" align="left">Element</th>',
+                    '<th scope="col" align="right">Number</th>',
+                    '<th scope="col" align="right">Relative mass</th>',
+                    '<th scope="col" align="right">Fraction %</th>',
+                    '</tr>',
+                )
+            )
 
             for symbol, count, mass, fraction in c:
                 symbol = re.sub(r'^(\d+)(.+)', r'<sup>\1</sup>\2', symbol)
-                result.extend((
-                    f'<tr><td>{symbol}</td>',
-                    f'<td align="center">{count}</td>',
-                    f'<td align="right">{mass:.{prec}f}</td>',
-                    f'<td align="right">{fraction * 100:.4f}</td></tr>',
-                ))
+                result.extend(
+                    (
+                        f'<tr><td>{symbol}</td>',
+                        f'<td align="center">{count}</td>',
+                        f'<td align="right">{mass:.{prec}f}</td>',
+                        f'<td align="right">{fraction * 100:.4f}</td></tr>',
+                    )
+                )
 
             count, mass, fraction = c.total
-            result.extend((
-                '<tr><td><em>Total</em></td>',
-                f'<td align="center"><em>{count}</em></td>',
-                f'<td align="right"><em>{mass:.{prec}f}</em></td>',
-                f'<td align="right"><em>{fraction * 100:.4f}</em></td>',
-                '</tr>',
-                '</table>',
-            ))
+            result.extend(
+                (
+                    '<tr><td><em>Total</em></td>',
+                    f'<td align="center"><em>{count}</em></td>',
+                    f'<td align="right"><em>{mass:.{prec}f}</em></td>',
+                    f'<td align="right"><em>{fraction * 100:.4f}</em></td>',
+                    '</tr>',
+                    '</table>',
+                )
+            )
 
         if f.atoms < maxatoms:
             s = f.spectrum()
             if len(s) > 1:
                 norm = 100.0 / s.peak[1]
-                result.extend((
-                    '<h3>Mass Distribution</h3>',
-                    '<p><strong>Most abundant mass</strong>: ',
-                    f'{s.peak[0]:.{prec}f} ({s.peak[1] * 100:.3f}%)</p>',
-                    f'<p><strong>Mean mass</strong>: {s.mean:.{prec}}</p>',
-                    '<table border="0" cellpadding="2">',
-                    '<tr>',
-                    '<th scope="col" align="left">Relative mass</th>',
-                    '<th scope="col" align="right">Fraction %</th>',
-                    '<th scope="col" align="right">Intensity</th>',
-                    '</tr>',
-                ))
+                result.extend(
+                    (
+                        '<h3>Mass Distribution</h3>',
+                        '<p><strong>Most abundant mass</strong>: ',
+                        f'{s.peak[0]:.{prec}f} ({s.peak[1] * 100:.3f}%)</p>',
+                        f'<p><strong>Mean mass</strong>: {s.mean:.{prec}}</p>',
+                        '<table border="0" cellpadding="2">',
+                        '<tr>',
+                        '<th scope="col" align="left">Relative mass</th>',
+                        '<th scope="col" align="right">Fraction %</th>',
+                        '<th scope="col" align="right">Intensity</th>',
+                        '</tr>',
+                    )
+                )
                 for mass, fraction in s.values():
-                    result.extend((
-                        f'<tr><td>{mass:.{prec}f}</td>',
-                        f'<td align="right">{fraction*100.:.6}</td>',
-                        f'<td align="right">{fraction*norm:.6}</td></tr>',
-                    ))
+                    result.extend(
+                        (
+                            f'<tr><td>{mass:.{prec}f}</td>',
+                            f'<td align="right">{fraction*100.:.6}</td>',
+                            f'<td align="right">{fraction*norm:.6}</td></tr>',
+                        )
+                    )
                 result.append('</table>')
 
     except Exception as exc:
@@ -335,20 +337,24 @@ def isotopes():
     </table>"""
     rows = []
     for ele in molmass.ELEMENTS:
-        rows.extend((
-            f'<tr><td><em>{ele.name}</em></td>',
-            f'<td align="right">{ele.mass:12.8f}</td></tr>',
-        ))
+        rows.extend(
+            (
+                f'<tr><td><em>{ele.name}</em></td>',
+                f'<td align="right">{ele.mass:12.8f}</td></tr>',
+            )
+        )
         for massnumber in sorted(ele.isotopes):
             iso = ele.isotopes[massnumber]
-            rows.extend((
-                '<tr>'
-                f'<td align="right"><sup>{massnumber}</sup>{ele.symbol}'
-                f'</td>',
-                f'<td align="right">{iso.mass:.8f}</td>',
-                f'<td align="right">{iso.abundance * 100.:.8f}</td>',
-                '</tr>',
-            ))
+            rows.extend(
+                (
+                    '<tr>'
+                    f'<td align="right"><sup>{massnumber}</sup>{ele.symbol}'
+                    f'</td>',
+                    f'<td align="right">{iso.mass:.8f}</td>',
+                    f'<td align="right">{iso.abundance * 100.:.8f}</td>',
+                    '</tr>',
+                )
+            )
     return template.format(rows='\n'.join(rows))
 
 
@@ -404,7 +410,7 @@ def main(url='http://localhost:9000/{}'):
         from http.server import HTTPServer, CGIHTTPRequestHandler
 
         def is_cgi(self):
-            """Monkey patch for CGIHTTPRequestHandler.is_cgi()."""
+            """Monkey patch for CGIHTTPRequestHandler.is_cgi."""
             if filename in self.path:
                 self.cgi_info = '', self.path[1:]
                 return True
