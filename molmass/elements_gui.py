@@ -1,6 +1,6 @@
 # elements_gui.py
 
-# Copyright (c) 2005-2020, Christoph Gohlke
+# Copyright (c) 2005-2021, Christoph Gohlke
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -31,25 +31,15 @@
 
 """Periodic Table of Elements - A user interface for elements.py.
 
-:Author: `Christoph Gohlke <https://www.lfd.uci.edu/~gohlke/>`_
-
-:License: BSD 3-Clause
-
-:Version: 2020.6.10
-
-Requirements
-------------
-* `CPython >= 3.6 <https://www.python.org>`_
-* `wxPython 4.1 <http://www.wxpython.org>`_
-* `Elements.py 2019.1.1 <https://www.lfd.uci.edu/~gohlke/>`_
-
 Revisions
 ---------
+2021.6.18
+    Remove support for Python 3.6 (NEP 29).
+    Fix symbol size on WSL2.
 2020.6.10
     Support wxPython 4.1.
 2019.1.1
     Require Python 3 and wxPython 4.
-    Update copyright.
 2018.8.15
     Move module into molmass package.
 2018.5.25
@@ -75,7 +65,7 @@ class MainApp(wx.App):
     """Main application."""
 
     name = 'Periodic Table of Elements'
-    version = '2020.6.10'
+    version = '2021.6.18'
     website = 'https://www.lfd.uci.edu/~gohlke/'
     copyright = (
         'Christoph Gohlke\n'
@@ -222,10 +212,11 @@ class MainFrame(wx.Frame):
         import wx.adv
 
         info = wx.adv.AboutDialogInfo()
-        info.Name = MainApp.name
-        info.Version = MainApp.version
-        info.Copyright = MainApp.copyright
-        info.WebSite = MainApp.website
+        info.SetName(MainApp.icon)
+        info.SetName(MainApp.name)
+        info.SetVersion(MainApp.version)
+        info.SetCopyright(MainApp.copyright)
+        info.SetWebSite(MainApp.website)
         wx.adv.AboutBox(info)
 
     def OnWebsite(self, evt):
@@ -293,7 +284,7 @@ class PeriodicPanel(wx.Panel):
         self.info = ElementPanel(self, -1, pos=(0, 0))
 
         # create element buttons
-        buttonsize = math.ceil(float(self.info.Size[0] + 4) / 9.0)
+        buttonsize = int(math.ceil((self.info.Size[0] + 4) / 9.0))
         if buttonsize < 30:
             buttonsize = 30
         for row in self.layout.splitlines()[1:-1]:
@@ -307,8 +298,10 @@ class PeriodicPanel(wx.Panel):
                     self.sizer.Add(
                         static,
                         0,
-                        wx.ALL | wx.ALIGN_CENTER_HORIZONTAL |
-                        wx.ALIGN_CENTER_VERTICAL | wx.FIXED_MINSIZE,
+                        wx.ALL
+                        | wx.ALIGN_CENTER_HORIZONTAL
+                        | wx.ALIGN_CENTER_VERTICAL
+                        | wx.FIXED_MINSIZE,
                         SPACER // 2,
                     )
                 else:
@@ -327,8 +320,11 @@ class PeriodicPanel(wx.Panel):
                     self.sizer.Add(
                         button,
                         0,
-                        wx.LEFT | wx.BOTTOM | wx.FIXED_MINSIZE |
-                        wx.ALIGN_CENTER_HORIZONTAL | wx.ALIGN_CENTER_VERTICAL,
+                        wx.LEFT
+                        | wx.BOTTOM
+                        | wx.FIXED_MINSIZE
+                        | wx.ALIGN_CENTER_HORIZONTAL
+                        | wx.ALIGN_CENTER_VERTICAL,
                         0,
                     )
                     self.Bind(wx.EVT_BUTTON, self.OnSelect, button)
@@ -368,8 +364,10 @@ class PeriodicPanel(wx.Panel):
             pos,
             ctrl,
             0,
-            wx.ALL | wx.ALIGN_CENTER_HORIZONTAL | wx.ALIGN_BOTTOM |
-            wx.FIXED_MINSIZE,
+            wx.ALL
+            | wx.ALIGN_CENTER_HORIZONTAL
+            | wx.ALIGN_BOTTOM
+            | wx.FIXED_MINSIZE,
             0,
         )
         self.Layout()
@@ -487,8 +485,12 @@ class ElementPanel(wx.Panel):
             col=0,
             rowspan=2,
             colspan=2,
-            flag=(wx.ALIGN_CENTER_HORIZONTAL | wx.ALIGN_CENTER_VERTICAL |
-                  wx.FIXED_MINSIZE),
+            flag=(
+                wx.ALIGN_CENTER_HORIZONTAL
+                | wx.ALIGN_CENTER_VERTICAL
+                | wx.EXPAND
+                | wx.ALL
+            ),
         )
         sizer.Add(
             self.name,
@@ -804,8 +806,12 @@ class DecriptionPanel(wx.Panel):
         sizer.Add(
             self.description,
             1,
-            wx.TOP | wx.LEFT | wx.RIGHT | wx.BOTTOM | wx.EXPAND |
-            wx.FIXED_MINSIZE,
+            wx.TOP
+            | wx.LEFT
+            | wx.RIGHT
+            | wx.BOTTOM
+            | wx.EXPAND
+            | wx.FIXED_MINSIZE,
             SPACER,
         )
 
@@ -1086,7 +1092,7 @@ COLORS = {
 
 
 def main():
-    """Main function."""
+    """Run the application."""
     MainApp(0).MainLoop()
 
 
