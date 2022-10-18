@@ -1,6 +1,6 @@
-# elements.py
+# molmass/elements.py
 
-# Copyright (c) 2005-2021, Christoph Gohlke
+# Copyright (c) 2005-2022, Christoph Gohlke
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -31,306 +31,140 @@
 
 """Properties of the chemical elements.
 
-Each chemical element is represented as an object instance. Physicochemical
-and descriptive properties of the elements are stored as instance attributes.
+Chemical elements, particles, and isotopes are represented as Python class
+instances. Physicochemical and descriptive properties of are accessible as
+attributes.
 
-:Author: `Christoph Gohlke <https://www.lfd.uci.edu/~gohlke/>`_
+Data sources:
 
-:License: BSD 3-Clause
-
-:Version: 2021.6.18
-
-Requirements
-------------
-* `CPython >= 3.7 <https://www.python.org>`_
-
-Revisions
----------
-2021.6.18
-    Remove support for Python 3.6 (NEP 29).
-    Add Particle types (#5).
-2020.1.1
-    Update atomic weights and isotopic compositions from NIST.
-    Move element descriptions into separate module.
-    Remove support for Python 2.7 and 3.5.
-    Update copyright.
-2018.8.15
-    Move modules into molmass package.
-2018.5.25
-    Style and docstring fixes.
-2016.2.25
-    Fixed some ionization energies.
-
-References
-----------
 1. https://www.nist.gov/pml/
    atomic-weights-and-isotopic-compositions-relative-atomic-masses
 2. https://en.wikipedia.org/wiki/{element.name}
 
-Examples
---------
->>> from molmass import ELEMENTS
->>> ele = ELEMENTS['C']
->>> ele.number
-6
->>> ele.symbol
-'C'
->>> ele.name
-'Carbon'
->>> ele.description[:21]
-'Carbon is a member of'
->>> ele.eleconfig
-'[He] 2s2 2p2'
->>> ele.eleconfig_dict
-{(1, 's'): 2, (2, 's'): 2, (2, 'p'): 2}
->>> str(ELEMENTS[6])
-'Carbon'
->>> len(ELEMENTS)
-109
->>> sum(ele.mass for ele in ELEMENTS)
-14693.181589001004
->>> for ele in ELEMENTS:
-...     ele.validate()
-...     ele = eval(repr(ele))
-
 """
 
-__version__ = '2021.6.18'
+from __future__ import annotations
 
-__all__ = (
-    'ELEMENTS',
+__version__ = '2022.10.18'
+
+__all__ = [
     'Element',
     'Isotope',
     'Particle',
-    'ELEMENTARY_CHARGE',
     'ELECTRON',
-    'PROTON',
+    'ELEMENTARY_CHARGE',
+    'ELEMENTS',
     'NEUTRON',
     'POSITRON',
-    'sqlite_script',
-)
+    'PROTON',
+]
+
+from dataclasses import dataclass
+from functools import cached_property
+from typing import Iterator
 
 
-class lazyattr:
-    """Attribute whose value is computed on first access.
-
-    Lazyattrs are not thread-safe.
-
-    """
-
-    # TODO: replace with functools.cached_property? requires Python >= 3.8
-    __slots__ = ('func', '__dict__')
-
-    def __init__(self, func):
-        """Initialize instance from decorated function."""
-        self.func = func
-        self.__doc__ = func.__doc__
-        self.__module__ = func.__module__
-        self.__name__ = func.__name__
-        self.__qualname__ = func.__qualname__
-        # self.lock = threading.RLock()
-
-    def __get__(self, instance, owner):
-        # with self.lock:
-        if instance is None:
-            return self
-        try:
-            value = self.func(instance)
-        except AttributeError as exc:
-            raise RuntimeError(exc)
-        if value is NotImplemented:
-            return getattr(super(owner, instance), self.func.__name__)
-        setattr(instance, self.func.__name__, value)
-        return value
-
-
-class Particle:
-    """Particle, e.g. electron, proton, or neutron.
-
-    Attributes
-    ----------
-    name : str
-        Name in English.
-    mass : float
-        Relative mass. Ratio of the average mass of atoms of the particle
-        to 1/12 of the mass of an atom of 12C.
-    charge : float
-        Electric charge in coulomb.
-
-    """
-
-    __slots__ = ('name', 'mass', 'charge')
-
-    def __init__(self, name, mass, charge):
-        self.name = name
-        self.mass = float(mass)
-        self.charge = float(charge)
-
-
+@dataclass
 class Element:
-    """Chemical element.
+    """Chemical element."""
 
-    Attributes
-    ----------
-    number : int
-        Atomic number.
-    symbol : str of length 1 or 2
-        Chemical symbol.
-    name : str
-        Name in English.
-    group : int
-        Group in periodic table.
-    period : int
-        Period in periodic table.
-    block : int
-        Block in periodic table.
-    series : int
-        Index to chemical series.
-    protons : int
-        Number of protons.
-    neutrons : int
-        Number of neutrons in the most abundant naturally occurring stable.
-        isotope
-    nominalmass : int
-        Mass number of the most abundant naturally occurring stable isotope.
-    electrons : int
-        Number of electrons.
-    mass : float
-        Relative atomic mass. Ratio of the average mass of atoms
-        of the element to 1/12 of the mass of an atom of 12C.
-    exactmass : float
-        Relative atomic mass calculated from the isotopic composition.
-    eleneg : float
-        Electronegativity (Pauling scale).
-    covrad : float
-        Covalent radius in Angstrom.
-    atmrad : float
-        Atomic radius in Angstrom.
-    vdwrad : float
-        Van der Waals radius in Angstrom.
-    tboil : float
-        Boiling temperature in K.
-    tmelt : float
-        Melting temperature in K.
-    density : float
-        Density at 295K in g/cm3 respectively g/L.
-    oxistates : str
-        Oxidation states.
-    eleaffin : float
-        Electron affinity in eV.
-    eleconfig : str
-        Ground state electron configuration.
-    eleconfig_dict : dict
-        Ground state electron configuration (shell, subshell): electrons.
-    eleshells : int
-        Number of electrons per shell.
-    ionenergy : tuple
-        Ionization energies in eV
-    isotopes : dict
-        Isotopic composition.
-        keys: isotope mass number
-        values: Isotope(relative atomic mass, abundance)
+    number: int
+    """Atomic number of protons."""
 
+    symbol: str
+    """Chemical symbol."""
+
+    name: str
+    """English name."""
+
+    group: int
+    """Group in periodic table."""
+
+    period: int
+    """Period in periodic table."""
+
+    block: str
+    """Block in periodic table."""
+
+    series: int
+    """Index to chemical series."""
+
+    mass: float
+    """Relative atomic mass.
+
+    The ratio of the average mass of atoms of the element to 1/12 of the mass
+    of an atom of 12C.
     """
 
-    def __init__(self, number, symbol, name, **kwargs):
-        self.number = number
-        self.symbol = symbol
-        self.name = name
-        self.electrons = number
-        self.protons = number
-        self.group = 0
-        self.period = 0
-        self.block = ''
-        self.series = 0
-        self.mass = 0.0
-        self.eleneg = 0.0
-        self.eleaffin = 0.0
-        self.covrad = 0.0
-        self.atmrad = 0.0
-        self.vdwrad = 0.0
-        self.tboil = 0.0
-        self.tmelt = 0.0
-        self.density = 0.0
-        self.eleconfig = ''
-        self.oxistates = ''
-        self.ionenergy = ()
-        self.isotopes = {}
-        self.__dict__.update(kwargs)
+    eleneg: float
+    """Electronegativity on Pauling scale."""
 
-    def __str__(self):
-        return self.name
+    eleaffin: float
+    """Electron affinity in eV."""
 
-    def __repr__(self):
-        ionenergy = []
-        for i, j in enumerate(self.ionenergy):
-            if i and (i % 5 == 0):
-                ionenergy.append(f'\n        {j}')
-            else:
-                ionenergy.append(f'{j}')
-        ionenergy = ', '.join(ionenergy)
-        if len(self.ionenergy) > 5:
-            ionenergy = f'(\n        {ionenergy},\n    )'
-        elif len(self.ionenergy) == 1:
-            ionenergy = f'({ionenergy},)'
-        else:
-            ionenergy = f'({ionenergy})'
+    covrad: float
+    """Covalent radius in Angstrom."""
 
-        isotopes = []
-        for massnum in sorted(self.isotopes):
-            iso = self.isotopes[massnum]
-            isotopes.append(
-                '{0}: Isotope({1}, {2}, {0})'.format(
-                    massnum, iso.mass, iso.abundance
-                )
-            )
-        isotopes = ',\n        '.join(isotopes)
-        if len(self.isotopes) > 1:
-            isotopes = f'{{\n        {isotopes},\n    }},'
-        else:
-            isotopes = f'{{{isotopes}}},'
+    atmrad: float
+    """Atomic radius in Angstrom."""
 
-        return ',\n    '.join(
-            (
-                f"Element(\n    {self.number}, '{self.symbol}', '{self.name}'",
-                f"group={self.group}, period={self.period},"
-                f" block='{self.block}', series={self.series}",
-                f"mass={self.mass}, eleneg={self.eleneg},"
-                f" eleaffin={self.eleaffin}",
-                f"covrad={self.covrad}, atmrad={self.atmrad},"
-                f" vdwrad={self.vdwrad}",
-                f"tboil={self.tboil}, tmelt={self.tmelt}, density={self.density}",
-                f"eleconfig='{self.eleconfig}'",
-                f"oxistates='{self.oxistates}'",
-                f"ionenergy={ionenergy}",
-                f"isotopes={isotopes}\n)",
-            )
-        )
+    vdwrad: float
+    """ Van der Waals radius in Angstrom."""
 
-    @lazyattr
-    def nominalmass(self):
-        """Return mass number of most abundant natural stable isotope."""
-        nominalmass = 0
-        maxabundance = 0
-        for massnum, iso in self.isotopes.items():
-            if iso.abundance > maxabundance:
-                maxabundance = iso.abundance
-                nominalmass = massnum
-        return nominalmass
+    tboil: float
+    """Boiling temperature in K."""
 
-    @lazyattr
-    def neutrons(self):
-        """Return number neutrons in most abundant natural stable isotope."""
+    tmelt: float
+    """Melting temperature in K."""
+
+    density: float
+    """Density at 295K in g/cm3 respectively g/L."""
+
+    eleconfig: str
+    """Ground state electron configuration."""
+
+    oxistates: str
+    """Oxidation states."""
+
+    ionenergy: tuple[float, ...]
+    """Ionization energies in eV."""
+
+    isotopes: dict[int, Isotope]
+    """Isotopic composition.
+
+    Mapping of isotope mass number to relative atomic mass and abundance.
+    """
+
+    @property
+    def protons(self) -> int:
+        """Number of protons."""
+        return self.number
+
+    @property
+    def electrons(self) -> int:
+        """Number of electrons."""
+        return self.number
+
+    @cached_property
+    def neutrons(self) -> int:
+        """Number of neutrons in most abundant natural stable isotope."""
         return self.nominalmass - self.protons
 
-    @lazyattr
-    def exactmass(self):
-        """Return relative atomic mass calculated from isotopic composition."""
+    @cached_property
+    def nominalmass(self) -> int:
+        """Mass number of most abundant natural stable isotope."""
+        return max(
+            self.isotopes.values(), key=lambda iso: iso.abundance
+        ).massnumber
+
+    @cached_property
+    def exactmass(self) -> float:
+        """Relative atomic mass calculated from isotopic composition."""
         return sum(iso.mass * iso.abundance for iso in self.isotopes.values())
 
-    @lazyattr
-    def eleconfig_dict(self):
-        """Return electron configuration as dict."""
+    @cached_property
+    def eleconfig_dict(self) -> dict[tuple[int, str], int]:
+        """Ground state electron configuration (shell, subshell): electrons."""
         adict = {}
         if self.eleconfig.startswith('['):
             base = self.eleconfig.split(' ', 1)[0][1:-1]
@@ -339,29 +173,26 @@ class Element:
             adict[(int(e[0]), e[1])] = int(e[2:]) if len(e) > 2 else 1
         return adict
 
-    @lazyattr
-    def eleshells(self):
-        """Return number of electrons in shell as tuple."""
+    @cached_property
+    def eleshells(self) -> tuple[int, ...]:
+        """Number of electrons in shell."""
         eleshells = [0, 0, 0, 0, 0, 0, 0]
         for key, val in self.eleconfig_dict.items():
             eleshells[key[0] - 1] += val
         return tuple(ele for ele in eleshells if ele)
 
-    @lazyattr
-    def description(self):
-        """Return text description of element."""
+    @cached_property
+    def description(self) -> str:
+        """Text description of element."""
         try:
-            from .elements_descriptions import elements_descriptions
+            from . import elements_descriptions  # noqa
         except ImportError:
-            try:
-                from elements_descriptions import elements_descriptions
-            except ImportError:
-                return ''
+            return ''
 
-        return elements_descriptions(ELEMENTS, self.symbol)
+        return ELEMENTS[self.symbol].description
 
-    def validate(self):
-        """Check consistency of data. Raise Error on failure."""
+    def validate(self) -> None:
+        """Check consistency of data. Raise ValueError on failure."""
         assert self.period in PERIODS
         assert self.group in GROUPS
         assert self.block in BLOCKS
@@ -399,32 +230,108 @@ class Element:
                 f'{self.symbol} - sum of isotope abundances != 1.0'
             )
 
+    def __repr__(self) -> str:
+        ionenergy_list = []
+        for i, j in enumerate(self.ionenergy):
+            if i and (i % 5 == 0):
+                ionenergy_list.append(f'\n        {j}')
+            else:
+                ionenergy_list.append(f'{j}')
+        ionenergy = ', '.join(ionenergy_list)
+        ionenergy = ionenergy.replace(' \n', '\n')
+        if len(self.ionenergy) > 5:
+            ionenergy = f'(\n        {ionenergy},\n    )'
+        elif len(self.ionenergy) == 1:
+            ionenergy = f'({ionenergy},)'
+        else:
+            ionenergy = f'({ionenergy})'
 
+        isotopes_list = []
+        for massnum in sorted(self.isotopes):
+            iso = self.isotopes[massnum]
+            isotopes_list.append(
+                f'{massnum}: Isotope({iso.mass}, {iso.abundance}, {massnum})'
+            )
+        isotopes = ',\n        '.join(isotopes_list)
+        if len(self.isotopes) > 1:
+            isotopes = f'{{\n        {isotopes},\n    }},'
+        else:
+            isotopes = f'{{{isotopes}}},'
+
+        return ',\n    '.join(
+            (
+                f'Element(\n    {self.number}, {self.symbol!r}, {self.name!r}',
+                f'group={self.group}, period={self.period},'
+                f' block={self.block!r}, series={self.series}',
+                f'mass={self.mass}, eleneg={self.eleneg},'
+                f' eleaffin={self.eleaffin}',
+                f'covrad={self.covrad}, atmrad={self.atmrad},'
+                f' vdwrad={self.vdwrad}',
+                f'tboil={self.tboil}, tmelt={self.tmelt},'
+                f' density={self.density}',
+                f'eleconfig={self.eleconfig!r}',
+                f'oxistates={self.oxistates!r}',
+                f'ionenergy={ionenergy}',
+                f'isotopes={isotopes}\n)',
+            )
+        )
+
+    def __str__(self) -> str:
+        return self.name
+
+
+@dataclass
 class Isotope:
-    """Isotope massnumber, relative atomic mass, and abundance."""
+    """Isotope properties."""
 
-    __slots__ = ('massnumber', 'mass', 'abundance')
+    mass: float
+    """Monoisotopic mass."""
 
-    def __init__(self, mass=0.0, abundance=1.0, massnumber=0):
-        self.mass = mass
-        self.abundance = abundance
-        self.massnumber = massnumber
+    abundance: float
+    """Natural fraction on Earth."""
 
-    def __str__(self):
-        return '{}, {:.4f}, {:.6f}%'.format(
-            self.massnumber, self.mass, self.abundance * 100
-        )
+    massnumber: int
+    """Number of protons and neutrons."""
 
-    def __repr__(self):
-        return 'Isotope({}, {}, {})'.format(
-            repr(self.mass), repr(self.abundance), repr(self.massnumber)
-        )
+    charge: int = 0
+    """Net charge in units of elementary charge."""
+
+    @property
+    def mz(self) -> float:
+        """Mass-to-charge ratio."""
+        if self.charge == 0:
+            return self.mass
+        return self.mass / abs(self.charge)
+
+
+@dataclass
+class Particle:
+    """Particle, e.g., electron, proton, or neutron."""
+
+    name: str
+    """English name."""
+
+    mass: float
+    """Relative mass.
+
+    The ratio of the average mass of atoms of the particle to 1/12 of the mass
+    of an atom of 12C.
+    """
+
+    charge: float
+    """Electric charge in coulomb."""
+
+    def __str__(self) -> str:
+        return self.name
 
 
 class Elements:
     """Ordered dict of Elements with lookup by number, symbol, and name."""
 
-    def __init__(self, *elements):
+    _list: list[Element]
+    _dict: dict[int | str, Element]
+
+    def __init__(self, *elements: Element) -> None:
         self._list = []
         self._dict = {}
         for element in elements:
@@ -438,10 +345,25 @@ class Elements:
             self._dict[element.symbol] = element
             self._dict[element.name] = element
 
-    def __str__(self):
-        return '[{}]'.format(', '.join(ele.symbol for ele in self._list))
+    def __contains__(self, item: int | str) -> bool:
+        return item in self._dict
 
-    def __repr__(self):
+    def __iter__(self) -> Iterator[Element]:
+        return iter(self._list)
+
+    def __len__(self) -> int:
+        return len(self._list)
+
+    def __getitem__(self, key: int | str) -> Element:
+        # if isinstance(key, slice):
+        #     try:
+        #         start, stop, step = key.indices(len(self._list))
+        #         return self._list[slice(start - 1, stop - 1, step)]
+        #     except Exception:
+        #         raise KeyError
+        return self._dict[key]
+
+    def __repr__(self) -> str:
         elements = ',\n    '.join(
             '\n    '.join(line for line in repr(element).splitlines())
             for element in self._list
@@ -449,28 +371,12 @@ class Elements:
         elements = f'Elements(\n    {elements},\n)'
         return elements
 
-    def __contains__(self, item):
-        return item in self._dict
-
-    def __iter__(self):
-        return iter(self._list)
-
-    def __len__(self):
-        return len(self._list)
-
-    def __getitem__(self, key):
-        try:
-            return self._dict[key]
-        except KeyError:
-            try:
-                start, stop, step = key.indices(len(self._list))
-                return self._list[slice(start - 1, stop - 1, step)]
-            except Exception:
-                raise KeyError
+    def __str__(self) -> str:
+        return '[{}]'.format(', '.join(ele.symbol for ele in self._list))
 
 
 # fmt: off
-ELEMENTS = Elements(
+ELEMENTS: Elements = Elements(
     Element(
         1, 'H', 'Hydrogen',
         group=1, period=1, block='s', series=1,
@@ -2146,18 +2052,33 @@ ELEMENTS = Elements(
 )
 # fmt: on
 
-ELEMENTARY_CHARGE = 1.602176634e-19
+ELEMENTARY_CHARGE: float = 1.602176634e-19  # coulomb
 
-ELECTRON = Particle('Electron', 5.48579909065e-4, -ELEMENTARY_CHARGE)
-PROTON = Particle('Proton', 1.007276466621, ELEMENTARY_CHARGE)
-NEUTRON = Particle('Neutron', 1.00866491595, 0.0)
-POSITRON = Particle('Positron', 5.48579909065e-4, ELEMENTARY_CHARGE)
+ELECTRON: Particle = Particle('Electron', 5.48579909065e-4, -ELEMENTARY_CHARGE)
+"""Electron particle."""
 
-PERIODS = {1: 'K', 2: 'L', 3: 'M', 4: 'N', 5: 'O', 6: 'P', 7: 'Q'}
+PROTON: Particle = Particle('Proton', 1.007276466621, ELEMENTARY_CHARGE)
+"""Proton particle."""
 
-BLOCKS = {'s': '', 'g': '', 'f': '', 'd': '', 'p': ''}
+NEUTRON: Particle = Particle('Neutron', 1.00866491595, 0.0)
+"""Neutron particle."""
 
-GROUPS = {
+POSITRON: Particle = Particle('Positron', 5.48579909065e-4, ELEMENTARY_CHARGE)
+"""Positron or antielectron particle."""
+
+PERIODS: dict[int, str] = {
+    1: 'K',
+    2: 'L',
+    3: 'M',
+    4: 'N',
+    5: 'O',
+    6: 'P',
+    7: 'Q',
+}
+
+BLOCKS: dict[str, str] = {'s': '', 'g': '', 'f': '', 'd': '', 'p': ''}
+
+GROUPS: dict[int, tuple[str, str]] = {
     1: ('IA', 'Alkali metals'),
     2: ('IIA', 'Alkaline earths'),
     3: ('IIIB', ''),
@@ -2178,7 +2099,7 @@ GROUPS = {
     18: ('VIIIA', 'Noble gases'),
 }
 
-SERIES = {
+SERIES: dict[int, str] = {
     1: 'Nonmetals',
     2: 'Noble gases',
     3: 'Alkali metals',
@@ -2192,19 +2113,18 @@ SERIES = {
 }
 
 
-def sqlite_script():
+def sqlite_script() -> str:
     """Return SQL script to create sqlite database of elements.
 
-    Examples
-    --------
-    >>> import sqlite3
-    >>> con = sqlite3.connect(':memory:')
-    >>> cur = con.executescript(sqlite_script())
-    >>> con.commit()
-    >>> for r in cur.execute("SELECT name FROM element WHERE number=6"):
-    ...     str(r[0])
-    'Carbon'
-    >>> con.close()
+    Examples:
+        >>> import sqlite3
+        >>> con = sqlite3.connect(':memory:')
+        >>> cur = con.executescript(sqlite_script())
+        >>> con.commit()
+        >>> for r in cur.execute("SELECT name FROM element WHERE number=6"):
+        ...     str(r[0])
+        'Carbon'
+        >>> con.close()
 
     """
     sql = [
@@ -2341,18 +2261,20 @@ def sqlite_script():
                 {ele.number}, {i + 1}, {ionenergy:.4f}\n);"""
             )
 
-    sql = '\n'.join(sql)
-    sql = sql.replace('                ', '            ')
-    sql = sql.replace('        ', '')
-    return sql
+    sqlstr = '\n'.join(sql)
+    sqlstr = sqlstr.replace('                ', '            ')
+    sqlstr = sqlstr.replace('        ', '')
+    return sqlstr
 
 
-def word_wrap(text, linelen=79, indent=0, joinstr='\n'):
+def word_wrap(
+    text: str, linelen: int = 79, indent: int = 0, joinstr: str = '\n'
+) -> str:
     """Return string, word wrapped at linelen."""
     if len(text) < linelen:
         return text
-    result = []
-    line = []
+    result: list[str] = []
+    line: list[str] = []
     llen = -indent
     for word in text.split():
         llen += len(word) + 1
@@ -2371,5 +2293,5 @@ if __name__ == '__main__':
     import doctest
 
     print(f'ELEMENTS = {repr(ELEMENTS)}')
-    # print(sqlite_script())
+    print(sqlite_script())
     doctest.testmod(verbose=False)
