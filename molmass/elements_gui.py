@@ -1,6 +1,6 @@
 # elements_gui.py
 
-# Copyright (c) 2005-2021, Christoph Gohlke
+# Copyright (c) 2005-2022, Christoph Gohlke
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -29,23 +29,15 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""Periodic Table of Elements - A user interface for elements.py.
+"""Periodic Table of Elements desktop application.
 
-Revisions
----------
-2021.6.18
-    Remove support for Python 3.6 (NEP 29).
-    Fix symbol size on WSL2.
-2020.6.10
-    Support wxPython 4.1.
-2019.1.1
-    Require Python 3 and wxPython 4.
-2018.8.15
-    Move module into molmass package.
-2018.5.25
-    Style fixes.
+Run the application::
+
+    python -m molmass.elements_gui
 
 """
+
+from __future__ import annotations
 
 import os
 import sys
@@ -55,23 +47,19 @@ import io
 import wx
 from wx.lib import fancytext, buttons, rcsizer
 
-if __package__:
+try:
     from .elements import ELEMENTS, SERIES
-else:
-    from elements import ELEMENTS, SERIES
+except ImportError:
+    from elements import ELEMENTS, SERIES  # type: ignore
 
 
 class MainApp(wx.App):
     """Main application."""
 
     name = 'Periodic Table of Elements'
-    version = '2021.6.18'
-    website = 'https://www.lfd.uci.edu/~gohlke/'
-    copyright = (
-        'Christoph Gohlke\n'
-        'Laboratory for Fluorescence Dynamics\n'
-        'University of California, Irvine'
-    )
+    version = '2022.10.18'
+    website = 'https://www.cgohlke.com'
+    copyright = 'Christoph Gohlke'
     icon = 'icon.png'
     try:
         icon = os.path.join(os.path.dirname(__file__), icon)
@@ -198,7 +186,7 @@ class MainFrame(wx.Frame):
     def OnDetails(self, evt):
         self.ApplyLayout(not self.show_info)
 
-    def OnEraseBackground(self, event):
+    def OnEraseBackground(self, evt):
         pass
 
     def OnCopy(self, evt):
@@ -251,14 +239,13 @@ class MainFrame(wx.Frame):
         self.Close()
         if __name__ == "__main__":
             sys.exit(0)
-        else:
-            return self.selected
+        return self.selected
 
 
 class PeriodicPanel(wx.Panel):
     """Periodic table of elements panel."""
 
-    layout = """
+    LAYOUT = """
         .  1  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  18 .
         1  H  2  .  .  .  .  .  .  .  .  .  .  13 14 15 16 17 He .
         2  Li Be .  .  .  .  .  .  .  .  .  .  B  C  N  O  F  Ne .
@@ -275,19 +262,18 @@ class PeriodicPanel(wx.Panel):
     def __init__(self, *args, **kwds):
         kwds['style'] = wx.TAB_TRAVERSAL
         wx.Panel.__init__(self, *args, **kwds)
-        rows = len(self.layout.splitlines()) - 2
-        cols = len(self.layout.splitlines()[1].split())
+        rows = len(PeriodicPanel.LAYOUT.splitlines()) - 2
+        cols = len(PeriodicPanel.LAYOUT.splitlines()[1].split())
         self.sizer = wx.FlexGridSizer(rows, cols, 0, 0)
         self.buttons = list(range(0, len(ELEMENTS)))
         self.selected = -1
-
         self.info = ElementPanel(self, -1, pos=(0, 0))
 
         # create element buttons
         buttonsize = int(math.ceil((self.info.Size[0] + 4) / 9.0))
         if buttonsize < 30:
             buttonsize = 30
-        for row in self.layout.splitlines()[1:-1]:
+        for row in PeriodicPanel.LAYOUT.splitlines()[1:-1]:
             for col in row.split():
                 if col == '.':
                     self.sizer.Add((SPACER, SPACER))
@@ -315,8 +301,8 @@ class PeriodicPanel(wx.Panel):
                     self.buttons[ele.number - 1] = button
                     button.SetBezelWidth(1)
                     button.SetToolTip(ele.name)
-                    col = COLORS[ele.series]
-                    button.SetButtonColour(wx.Colour(col[0], col[1], col[2]))
+                    c = COLORS[ele.series]
+                    button.SetButtonColour(wx.Colour(c[0], c[1], c[2]))
                     self.sizer.Add(
                         button,
                         0,
@@ -532,7 +518,6 @@ class ElementPanel(wx.Panel):
         sizer.Add(self.oxistates, row=2, col=4, flag=wx.ADJUST_MINSIZE)
         sizer.Add(self.ionpot, row=3, col=4, flag=wx.ADJUST_MINSIZE)
         sizer.Add(self.eleneg, row=4, col=4, flag=wx.ADJUST_MINSIZE)
-
         self.SetAutoLayout(True)
         self.SetSizer(sizer)
         sizer.Fit(self)
@@ -838,13 +823,13 @@ class ElementButton(buttons.GenToggleButton):
         self.color = wx.Colour(255, 255, 255)
         self.Bind(wx.EVT_ERASE_BACKGROUND, self.OnEraseBackground)
 
-    def OnEraseBackground(self, event):
+    def OnEraseBackground(self, evt):
         pass
 
     def SetButtonColour(self, color):
         self.color = color
 
-    def OnPaint(self, event):
+    def OnPaint(self, evt):
         width, height = self.GetClientSize()
         dc = wx.BufferedPaintDC(self)
         brush = wx.Brush(self.GetBackgroundColour(), wx.BRUSHSTYLE_SOLID)
@@ -934,7 +919,7 @@ class StaticFancyText(fancytext.StaticFancyText):
 class DisclosureCtrl(buttons.GenBitmapTextToggleButton):
     """Disclosure triangle button."""
 
-    bmp0 = (
+    BMP0 = (
         b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\r\x00\x00'
         b'\x00\r\x08\x06\x00\x00\x00r\xeb\xe4|\x00\x00\x00\x04sBIT'
         b'\x08\x08\x08\x08|\x08d\x88\x00\x00\x00\xd5IDAT(\x91\x9d'
@@ -951,7 +936,7 @@ class DisclosureCtrl(buttons.GenBitmapTextToggleButton):
         b'\xf9\xbd_\xd7\x8c7Z\xc0k\x8d8\x00\x00\x00\x00IEND\xaeB`\x82'
     )
 
-    bmp1 = (
+    BMP1 = (
         b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\r\x00\x00'
         b'\x00\r\x08\x06\x00\x00\x00r\xeb\xe4|\x00\x00\x00\x04sBIT'
         b'\x08\x08\x08\x08|\x08d\x88\x00\x00\x00\xc1IDAT(\x91\x9d\xd2;'
@@ -973,8 +958,8 @@ class DisclosureCtrl(buttons.GenBitmapTextToggleButton):
             self, parent, winid, None, label, *args, **kwds
         )
 
-        self.bmp0 = wx.Bitmap(wx.Image(io.BytesIO(self.bmp0)))
-        self.bmp1 = wx.Bitmap(wx.Image(io.BytesIO(self.bmp1)))
+        self.bmp0 = wx.Bitmap(wx.Image(io.BytesIO(DisclosureCtrl.BMP0)))
+        self.bmp1 = wx.Bitmap(wx.Image(io.BytesIO(DisclosureCtrl.BMP1)))
 
         self.SetBitmapLabel(self.bmp0)
         self.SetBitmapSelected(self.bmp1)
@@ -987,7 +972,7 @@ class DisclosureCtrl(buttons.GenBitmapTextToggleButton):
         self.SetToolTip('Show')
         self.Bind(wx.EVT_ERASE_BACKGROUND, self.OnEraseBackground)
 
-    def OnEraseBackground(self, event):
+    def OnEraseBackground(self, evt):
         pass
 
     def Notify(self):
@@ -998,7 +983,7 @@ class DisclosureCtrl(buttons.GenBitmapTextToggleButton):
         width, height, usemin = self._GetLabelSize()
         return (width + 5, height + 4)
 
-    def OnPaint(self, event):
+    def OnPaint(self, evt):
         width, height = self.GetClientSize()
         dc = wx.BufferedPaintDC(self)
         brush = None
