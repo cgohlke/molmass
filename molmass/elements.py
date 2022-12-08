@@ -45,7 +45,7 @@ Data sources:
 
 from __future__ import annotations
 
-__version__ = '2022.10.18'
+__version__ = '2022.12.9'
 
 __all__ = [
     'Element',
