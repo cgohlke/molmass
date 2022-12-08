@@ -44,7 +44,7 @@ of the chemical elements.
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD 3-Clause
-:Version: 2022.10.18
+:Version: 2022.12.8
 :DOI: 10.5281/zenodo.7135495
 
 Quickstart
@@ -76,13 +76,17 @@ Requirements
 This release has been tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython 3.8.10, 3.9.13, 3.10.8, 3.11.0rc2 <https://www.python.org>`_
+- `CPython 3.8.10, 3.9.13, 3.10.9, 3.11.1 <https://www.python.org>`_
 - `Flask 2.2.2 <https://pypi.org/project/Flask/>`_ (optional)
-- `Pandas 1.5.0 <https://pypi.org/project/pandas/>`_ (optional)
+- `Pandas 1.5.2 <https://pypi.org/project/pandas/>`_ (optional)
 - `wxPython 4.2.0 <https://pypi.org/project/wxPython/>`_ (optional)
 
 Revisions
 ---------
+
+2022.12.8
+
+- Fix split_charge formula with trailing ]] (#11).
 
 2022.10.18
 
@@ -229,7 +233,7 @@ Element(
 
 from __future__ import annotations
 
-__version__ = '2022.10.18'
+__version__ = '2022.12.8'
 
 __all__ = [
     'Composition',
@@ -1799,6 +1803,10 @@ def split_charge(formula: str, /) -> tuple[str, int]:
         ('Formula', 2)
         >>> split_charge('[Formula]2+')
         ('Formula', 2)
+        >>> split_charge('[[Formula]]2-')
+        ('[Formula]', -2)
+        >>> split_charge('[Formula]_2-')
+        ('Formula', -2)
         >>> split_charge('Formula_2-')
         ('Formula', -2)
         >>> split_charge('Formula_+')
@@ -1810,7 +1818,7 @@ def split_charge(formula: str, /) -> tuple[str, int]:
 
     """
     charge = 0
-    m = re.search(r'([\]_]{1,})([0-9]{1,})([+-]{1,})$', formula)
+    m = re.search(r'([\]_])([0-9]{1,})([+-]{1,})$', formula)
     if m:
         m_delim, m_count, m_sign = m.groups()
         if m_count == '':
@@ -2153,6 +2161,8 @@ def test(verbose: bool = False) -> None:
         ('12C', '[12C]', 12.0),
         ('12CC', 'C[12C]', 24.0107),
         ('SO4_2-', '[O4S]2-', 96.06351715981813),
+        ('[CHNOP[13C]]2-', '[C[13C]HNOP]2-', 87.003003),
+        ('[CHNOP[13C]]_2-', '[C[13C]HNOP]2-', 87.003003),
         ('Co(Bpy)(CO)4', '', 327.16),
         ('CH3CH2Cl', 'C2H5Cl', 64.5147),
         ('C1000H1000', 'CH', 13018.68),
@@ -2222,6 +2232,7 @@ def test(verbose: bool = False) -> None:
         '(H)0C',
         'Ox: 0.26, 30Si: 0.74',
         'H^++',
+        '[CHNOP[13C]]__2-',
     ]:
         if verbose:
             print(f'Trying Formula({formula!r}) ...', end='')
