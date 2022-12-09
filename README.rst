@@ -14,7 +14,7 @@ of the chemical elements.
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD 3-Clause
-:Version: 2022.10.18
+:Version: 2022.12.9
 :DOI: 10.5281/zenodo.7135495
 
 Quickstart
@@ -46,13 +46,17 @@ Requirements
 This release has been tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython 3.8.10, 3.9.13, 3.10.8, 3.11.0rc2 <https://www.python.org>`_
+- `CPython 3.8.10, 3.9.13, 3.10.9, 3.11.1 <https://www.python.org>`_
 - `Flask 2.2.2 <https://pypi.org/project/Flask/>`_ (optional)
-- `Pandas 1.5.0 <https://pypi.org/project/pandas/>`_ (optional)
+- `Pandas 1.5.2 <https://pypi.org/project/pandas/>`_ (optional)
 - `wxPython 4.2.0 <https://pypi.org/project/wxPython/>`_ (optional)
 
 Revisions
 ---------
+
+2022.12.9
+
+- Fix split_charge formula with trailing ]] (#11).
 
 2022.10.18
 
