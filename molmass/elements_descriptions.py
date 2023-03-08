@@ -813,7 +813,6 @@ ELEMENTS['Mt'].description = (
 )
 
 if __name__ == '__main__':
-
     try:
         from .elements import word_wrap
     except ImportError:
