@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # molmass/web.py
 
-# Copyright (c) 2005-2022, Christoph Gohlke
+# Copyright (c) 2005-2023, Christoph Gohlke
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -516,11 +516,10 @@ def cgi(url: str, *, open_browser: bool = True, debug: bool = True) -> int:
         request.get = request.getfirst  # type: ignore
         print(response(request, url))
     else:
-
         from urllib.parse import urlparse
         from http.server import HTTPServer, CGIHTTPRequestHandler
 
-        def is_cgi(self):
+        def is_cgi(self) -> bool:
             # monkey patch for CGIHTTPRequestHandler.is_cgi
             if filename in self.path:
                 self.cgi_info = '', self.path[1:]
@@ -578,7 +577,7 @@ def main(
     app = Flask(__name__)
 
     @app.route('/', methods=['GET'])
-    def root():
+    def root() -> str:
         nonlocal form
         r = response(
             request.args if form is None else form, url=request.base_url
