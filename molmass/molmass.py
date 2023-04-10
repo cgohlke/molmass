@@ -1,6 +1,6 @@
 # molmass.py
 
-# Copyright (c) 1990-2022, Christoph Gohlke
+# Copyright (c) 1990-2023, Christoph Gohlke
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -44,14 +44,14 @@ of the chemical elements.
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD 3-Clause
-:Version: 2022.12.9
-:DOI: 10.5281/zenodo.7135495
+:Version: 2023.4.10
+:DOI: `10.5281/zenodo.7135495 <https://doi.org/10.5281/zenodo.7135495>`_
 
 Quickstart
 ----------
 
 Install the molmass package and all dependencies from the
-Python Package Index::
+`Python Package Index <https://pypi.org/project/molmass/>`_::
 
     python -m pip install -U molmass[all]
 
@@ -73,16 +73,21 @@ Source code and support are available on
 Requirements
 ------------
 
-This release has been tested with the following requirements and dependencies
+This revision was tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython 3.8.10, 3.9.13, 3.10.9, 3.11.1 <https://www.python.org>`_
-- `Flask 2.2.2 <https://pypi.org/project/Flask/>`_ (optional)
-- `Pandas 1.5.2 <https://pypi.org/project/pandas/>`_ (optional)
-- `wxPython 4.2.0 <https://pypi.org/project/wxPython/>`_ (optional)
+- `CPython <https://www.python.org>`_ 3.8.10, 3.9.13, 3.10.11, 3.11.3
+- `Flask <https://pypi.org/project/Flask/>`_ 2.2.3 (optional)
+- `Pandas <https://pypi.org/project/pandas/>`_ 1.5.3 (optional)
+- `wxPython <https://pypi.org/project/wxPython/>`_ 4.2.0 (optional)
 
 Revisions
 ---------
+
+2023.4.10
+
+- Support rdkit-style ionic charges (#11, #12).
+- Enable multiplication without addition in from_string.
 
 2022.12.9
 
@@ -233,7 +238,7 @@ Element(
 
 from __future__ import annotations
 
-__version__ = '2022.12.9'
+__version__ = '2023.4.10'
 
 __all__ = [
     'Composition',
@@ -295,6 +300,7 @@ def analyze(
         formula: Chemical formula.
         maxatoms: Number of atoms below which to calculate spectrum.
         min_intensity: Minimum intensity to include in spectrum.
+        debug: If True, raise exceptions, else print error message.
 
     Examples:
         >>> print(analyze('C8H10N4O2', min_intensity=0.01))
@@ -407,6 +413,9 @@ class Formula:
 
         >>> Formula('[AsO4]3-')
         Formula('[AsO4]3-')
+
+        >>> Formula('O2-2')
+        Formula('[O2]2-')
 
         Abbreviations of chemical groups:
 
@@ -918,7 +927,7 @@ class Formula:
 
         """
         if not isinstance(number, int) or number < 1:
-            raise TypeError('can only multipy with positive number')
+            raise TypeError('can only multiply with positive number')
         return Formula(
             join_charge(
                 f'({self._formula_nocharge}){number}', self._charge * number
@@ -1336,7 +1345,7 @@ class FormulaError(Exception):
         >>> Formula('(H2O)2-H2O').formula
         Traceback (most recent call last):
          ...
-        molmass.molmass.FormulaError: unexpected character '-'
+        molmass.molmass.FormulaError: subtraction not allowed
         (H2O)2-H2O
         ......^
 
@@ -1406,6 +1415,10 @@ def from_string(formula: str, groups: dict[str, str] | None = None, /) -> str:
         'CuSO4(H2O)5'
         >>> from_string('CuSO4+5*H2O')
         'CuSO4(H2O)5'
+        >>> from_string('5*H2O')
+        '(H2O)5'
+        >>> from_string('O2+12C')  # not [12C]O2
+        'O2(C)12'
         >>> from_string('ssdna(AC)')
         '((C10H12N5O5P)(C9H12N3O6P)H2O)'
         >>> from_string('peptide(GG)')
@@ -1458,14 +1471,22 @@ def from_string(formula: str, groups: dict[str, str] | None = None, /) -> str:
 
     # arithmetic
     formula = formula.replace('.', '+')
-    if '+' in formula:
+    if '+' in formula or '*' in formula:
+        # TODO: document O2+12C is C12O2, not [12C]O2
         for match in re.findall(
             r'(?:\+|^)((\d+)\*?(.*?))(?:(?=\+)|$)', formula
         ):
             formula = formula.replace(match[0], f'({match[2]}){match[1]}')
+        m = re.search(r'(\+[a-z])', formula)
+        if m:
+            raise FormulaError(
+                'invalid symbol', formula, formula.index(m[0]) + 1
+            )
         formula = formula.replace('+', '')
     if '-' in formula:
-        FormulaError('subtraction not allowed', formula, formula.index('-'))
+        raise FormulaError(
+            'subtraction not allowed', formula, formula.index('-')
+        )
 
     if charge != 0:
         formula = f'[{formula}]{format_charge(charge)}'
@@ -1799,15 +1820,23 @@ def split_charge(formula: str, /) -> tuple[str, int]:
         ('Formula', 0)
         >>> split_charge('Formula+')
         ('Formula', 1)
+        >>> split_charge('Formula+1')
+        ('Formula', 1)
         >>> split_charge('Formula++')
         ('Formula', 2)
         >>> split_charge('[Formula]2+')
         ('Formula', 2)
+        >>> split_charge('Formula+2')
+        ('Formula', 2)
         >>> split_charge('[[Formula]]2-')
         ('[Formula]', -2)
+        >>> split_charge('[Formula]-2')
+        ('Formula', -2)
         >>> split_charge('[Formula]_2-')
         ('Formula', -2)
         >>> split_charge('Formula_2-')
+        ('Formula', -2)
+        >>> split_charge('Formula-2')
         ('Formula', -2)
         >>> split_charge('Formula_+')
         ('Formula', 1)
@@ -1826,15 +1855,21 @@ def split_charge(formula: str, /) -> tuple[str, int]:
         else:
             charge = int(f'{m_sign}{m_count}')
     else:
-        m = re.search(r'([\]_]?)([+-]{1,})$', formula)
-        charge = 0
+        m = re.search(r'([+-]{1})([0-9]{1,})$', formula)
         if m:
-            m_delim, m_sign = m.groups()
-            for char in m_sign:
-                if char == '+':
-                    charge += 1
-                elif char == '-':
-                    charge -= 1
+            m_sign, m_count = m.groups()
+            m_delim = f'{m_sign}{m_count}'
+            charge = int(m_delim)
+        else:
+            m = re.search(r'([\]_]?)([+-]{1,})$', formula)
+            charge = 0
+            if m:
+                m_delim, m_sign = m.groups()
+                for char in m_sign:
+                    if char == '+':
+                        charge += 1
+                    elif char == '-':
+                        charge -= 1
     if m:
         if m_delim == '_':
             formula = formula.rsplit('_', 1)[0]
@@ -1842,6 +1877,8 @@ def split_charge(formula: str, /) -> tuple[str, int]:
             formula = formula.strip(m_sign)
         elif m_delim == ']':
             formula = formula.rsplit(']', 1)[0] + ']'
+        else:
+            formula = formula.rsplit(m_delim, 1)[0]
         if formula.startswith('[') and formula.endswith(']'):
             formula = formula[1:-1]
     return formula, charge
@@ -1878,7 +1915,7 @@ def join_charge(formula: str, charge: int, separator: str = '', /) -> str:
     return formula
 
 
-def format_charge(charge: int, prefix='', /) -> str:
+def format_charge(charge: int, prefix: str = '', /) -> str:
     """Return string representation of charge.
 
     Parameters:
@@ -2163,6 +2200,7 @@ def test(verbose: bool = False) -> None:
         ('SO4_2-', '[O4S]2-', 96.06351715981813),
         ('[CHNOP[13C]]2-', '[C[13C]HNOP]2-', 87.003),
         ('[CHNOP[13C]]_2-', '[C[13C]HNOP]2-', 87.003),
+        ('CHNOP[13C]-2', '[C[13C]HNOP]2-', 87.003),
         ('Co(Bpy)(CO)4', '', 327.16),
         ('CH3CH2Cl', 'C2H5Cl', 64.5147),
         ('C1000H1000', 'CH', 13018.68),
@@ -2181,6 +2219,8 @@ def test(verbose: bool = False) -> None:
         ('PhNH2.HCl', 'C6H8ClN', 129.5892),
         ('NH3.BF3', 'BF3H3N', 84.8357),
         ('CuSO4.5H2O', 'CuH10O9S', 249.68),
+        ('5*H2O+CuSO4', 'CuH10O9S', 249.68),
+        ('5*H2O', 'H2O', 90.076435),
         (
             'HCysp(Trt)Tyrp(Tbu)IleGlnp(Trt)Asnp(Trt)ProLeuGlyNH2',
             'C101H113N11O11S',
@@ -2233,6 +2273,8 @@ def test(verbose: bool = False) -> None:
         'Ox: 0.26, 30Si: 0.74',
         'H^++',
         '[CHNOP[13C]]__2-',
+        'O2_-2',
+        'C+a',
     ]:
         if verbose:
             print(f'Trying Formula({formula!r}) ...', end='')
@@ -2264,8 +2306,13 @@ def main(argv: list[str] | None = None, /) -> int:
 
     import optparse
 
-    def search_doc(r, d):
-        return re.search(r, __doc__).group(1) if __doc__ else d
+    def search_doc(r: str, d: str) -> str:
+        if not __doc__:
+            return d
+        match = re.search(r, __doc__)
+        if match is None:
+            return d
+        return match.group(1)
 
     parser = optparse.OptionParser(
         usage='usage: %prog [options] formula',
