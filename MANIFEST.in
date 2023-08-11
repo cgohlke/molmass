@@ -1,5 +1,7 @@
 include LICENSE
 include README.rst
+
+include molmass/py.typed
 include molmass/icon.png
 
 exclude *.cmd
