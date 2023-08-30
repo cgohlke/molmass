@@ -44,7 +44,7 @@ of the chemical elements.
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD 3-Clause
-:Version: 2023.4.10
+:Version: 2023.8.30
 :DOI: `10.5281/zenodo.7135495 <https://doi.org/10.5281/zenodo.7135495>`_
 
 Quickstart
@@ -76,13 +76,19 @@ Requirements
 This revision was tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython <https://www.python.org>`_ 3.8.10, 3.9.13, 3.10.11, 3.11.3
-- `Flask <https://pypi.org/project/Flask/>`_ 2.2.3 (optional)
+- `CPython <https://www.python.org>`_ 3.9.13, 3.10.11, 3.11.5, 3.12rc
+- `Flask <https://pypi.org/project/Flask/>`_ 2.3.3 (optional)
 - `Pandas <https://pypi.org/project/pandas/>`_ 1.5.3 (optional)
-- `wxPython <https://pypi.org/project/wxPython/>`_ 4.2.0 (optional)
+- `wxPython <https://pypi.org/project/wxPython/>`_ 4.2.1 (optional)
 
 Revisions
 ---------
+
+2023.8.30
+
+- Fix linting issues.
+- Add py.typed marker.
+- Remove support for Python 3.8.
 
 2023.4.10
 
@@ -229,7 +235,7 @@ Element(
 >>> len(ELEMENTS)
 109
 >>> sum(e.mass for e in ELEMENTS)
-14693.181589001004
+14693.181589001...
 >>> for e in ELEMENTS:
 ...     e.validate()
 ...     e = eval(repr(e))
@@ -238,7 +244,7 @@ Element(
 
 from __future__ import annotations
 
-__version__ = '2023.4.10'
+__version__ = '2023.8.30'
 
 __all__ = [
     'Composition',
@@ -267,23 +273,24 @@ __all__ = [
     'PREPROCESSORS',
 ]
 
-import sys
-import re
-import math
 import copy
+import math
+import re
+import sys
 from dataclasses import dataclass
-from functools import reduce, cached_property
-
+from functools import cached_property, reduce
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from typing import Callable, Iterable, Iterator, Sequence
+    from collections.abc import Iterable, Iterator, Sequence
+    from typing import Callable
+
     import pandas
 
 try:
-    from .elements import ELEMENTS, ELECTRON, Isotope
+    from .elements import ELECTRON, ELEMENTS, Isotope
 except ImportError:
-    from elements import ELEMENTS, ELECTRON, Isotope  # type: ignore
+    from elements import ELECTRON, ELEMENTS, Isotope  # type: ignore
 
 
 def analyze(
@@ -660,7 +667,7 @@ class Formula:
 
         The sum of the relative atomic masses of all atoms and charges in
         the formula.
-        Equals the molar mass in g/mol, i.e., the mass of one mole of
+        Equals the molar mass in g/mol, that is, the mass of one mole of
         substance.
 
         >>> Formula('H').mass
@@ -678,9 +685,9 @@ class Formula:
 
         """
         result = 0.0
-        for symbol in self._elements:
+        for symbol, massnumber_counts in self._elements.items():
             ele = ELEMENTS[symbol]
-            for massnumber, count in self._elements[symbol].items():
+            for massnumber, count in massnumber_counts.items():
                 if massnumber:
                     result += ele.isotopes[massnumber].mass * count
                 else:
@@ -739,9 +746,9 @@ class Formula:
 
         """
         result = Isotope(-ELECTRON.mass * self._charge, 1.0, 0, self._charge)
-        for symbol in self._elements:
+        for symbol, massnumber_counts in self._elements.items():
             ele = ELEMENTS[symbol]
-            for massnumber, count in self._elements[symbol].items():
+            for massnumber, count in massnumber_counts.items():
                 if massnumber != 0:
                     isotope = ele.isotopes[massnumber]
                 else:
@@ -862,11 +869,11 @@ class Formula:
 
         """
         spectrum: dict[int, list[float]] = {0: [0.0, 1.0, 0.0]}
-        elements = self._elements
+        elements: dict[str, dict[int, int]] = self._elements
 
-        for symbol in elements:
+        for symbol, massnumber_counts in elements.items():
             ele = ELEMENTS[symbol]
-            for massnumber, count in elements[symbol].items():
+            for massnumber, count in massnumber_counts.items():
                 if massnumber:
                     # specific isotope
                     iso = ele.isotopes[massnumber]
@@ -1797,12 +1804,10 @@ def precision_digits(f: float, width: int, /) -> int:
 
     """
     precision = math.log(abs(f), 10)
-    if precision < 0:
-        precision = 0
+    precision = max(precision, 0)
     precision = width - int(math.floor(precision))
     precision -= 3 if f < 0 else 2  # sign and decimal point
-    if precision < 1:
-        precision = 1
+    precision = max(precision, 1)
     return precision
 
 
@@ -2183,7 +2188,7 @@ def test(verbose: bool = False) -> None:
         ),
     }, spectrum.asdict()
 
-    assert spectrum.mean == 46.06852122027406, spectrum.mean
+    assert abs(spectrum.mean - 46.06852122027406) < 1e-9, spectrum.mean
     assert spectrum.peak.astuple() == (
         46,
         46.04186481295,
@@ -2233,7 +2238,7 @@ def test(verbose: bool = False) -> None:
             f = Formula(formula)
             f.empirical
             f.mass
-            f.spectrum
+            f.spectrum()
         except FormulaError as exc:
             print('Error:', exc)
             continue
@@ -2317,7 +2322,7 @@ def main(argv: list[str] | None = None, /) -> int:
     parser = optparse.OptionParser(
         usage='usage: %prog [options] formula',
         description=search_doc('\n\n([^|]*?)\n\n', ''),
-        version='%prog {}'.format(search_doc(':Version: (.*)', 'Unknown')),
+        version='%prog ' + search_doc(':Version: (.*)', 'Unknown'),
         prog='molmass',
     )
     opt = parser.add_option
@@ -2395,8 +2400,7 @@ def main(argv: list[str] | None = None, /) -> int:
     except Exception as exc:
         print('\nError: \n  ', exc, sep='')
         raise exc
-    else:
-        print('\n', results, sep='')
+    print('\n', results, sep='')
 
     return 0
 
