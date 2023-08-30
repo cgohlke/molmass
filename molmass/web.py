@@ -516,8 +516,8 @@ def cgi(url: str, *, open_browser: bool = True, debug: bool = True) -> int:
         request.get = request.getfirst  # type: ignore
         print(response(request, url))
     else:
+        from http.server import CGIHTTPRequestHandler, HTTPServer
         from urllib.parse import urlparse
-        from http.server import HTTPServer, CGIHTTPRequestHandler
 
         def is_cgi(self) -> bool:
             # monkey patch for CGIHTTPRequestHandler.is_cgi
