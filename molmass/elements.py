@@ -45,7 +45,7 @@ Data sources:
 
 from __future__ import annotations
 
-__version__ = '2022.12.9'
+__version__ = '2023.8.30'
 
 __all__ = [
     'Element',
@@ -59,9 +59,9 @@ __all__ = [
     'PROTON',
 ]
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 from functools import cached_property
-from typing import Iterator
 
 
 @dataclass
