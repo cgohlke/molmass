@@ -39,13 +39,13 @@ Run the application::
 
 from __future__ import annotations
 
+import io
+import math
 import os
 import sys
-import math
-import io
 
 import wx
-from wx.lib import fancytext, buttons, rcsizer
+from wx.lib import buttons, fancytext, rcsizer
 
 try:
     from .elements import ELEMENTS, SERIES
@@ -360,7 +360,7 @@ class PeriodicPanel(wx.Panel):
 
     def OnTimer(self, evt):
         button = self.buttons[self.selected]
-        button.SetToggle(button.up)
+        button.SetToggle(button.up)  # type: ignore
 
     def OnSelect(self, evt):
         self.GetParent().SetSelection(evt.GetId() - 101)
@@ -370,7 +370,7 @@ class PeriodicPanel(wx.Panel):
         if self.selected == select:
             return
         # reset old selection
-        self.buttons[self.selected].SetToggle(False)
+        self.buttons[self.selected].SetToggle(False)  # type: ignore
         # highlight new selection
         self.selected = select
         self.buttons[select].SetToggle(True)
