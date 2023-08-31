@@ -14,7 +14,7 @@ of the chemical elements.
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD 3-Clause
-:Version: 2023.4.10
+:Version: 2023.8.30
 :DOI: `10.5281/zenodo.7135495 <https://doi.org/10.5281/zenodo.7135495>`_
 
 Quickstart
@@ -46,13 +46,19 @@ Requirements
 This revision was tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython <https://www.python.org>`_ 3.8.10, 3.9.13, 3.10.11, 3.11.3
-- `Flask <https://pypi.org/project/Flask/>`_ 2.2.3 (optional)
+- `CPython <https://www.python.org>`_ 3.9.13, 3.10.11, 3.11.5, 3.12rc
+- `Flask <https://pypi.org/project/Flask/>`_ 2.3.3 (optional)
 - `Pandas <https://pypi.org/project/pandas/>`_ 1.5.3 (optional)
-- `wxPython <https://pypi.org/project/wxPython/>`_ 4.2.0 (optional)
+- `wxPython <https://pypi.org/project/wxPython/>`_ 4.2.1 (optional)
 
 Revisions
 ---------
+
+2023.8.30
+
+- Fix linting issues.
+- Add py.typed marker.
+- Remove support for Python 3.8.
 
 2023.4.10
 
@@ -199,7 +205,7 @@ Element(
 >>> len(ELEMENTS)
 109
 >>> sum(e.mass for e in ELEMENTS)
-14693.181589001004
+14693.181589001...
 >>> for e in ELEMENTS:
 ...     e.validate()
 ...     e = eval(repr(e))
