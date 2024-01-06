@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # molmass/web.py
 
-# Copyright (c) 2005-2023, Christoph Gohlke
+# Copyright (c) 2005-2024, Christoph Gohlke
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -357,7 +357,7 @@ def analyze(
             result.extend(
                 (
                     '<!--h3>Mass Distribution</h3-->',
-                    '<table class="table">'
+                    '<table class="table">',
                     '<caption>Mass Distribution</caption>',
                     '<tr>',
                     '<th scope="col">Mass number</th>',
@@ -397,7 +397,6 @@ def analyze(
 
 def isotopes() -> str:
     """Return HTML table of isotope masses and abundances."""
-
     template = """
     <!--h2>Isotopic Composition of the Elements</h2-->
     <table>
@@ -438,7 +437,6 @@ def isotopes() -> str:
 
 def groups() -> str:
     """Return HTML table of chemical groups."""
-
     template = """
     <!--h3>{title}</h3-->
     <table>
