@@ -1,6 +1,6 @@
 # molmass/elements.py
 
-# Copyright (c) 2005-2023, Christoph Gohlke
+# Copyright (c) 2005-2024, Christoph Gohlke
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -45,7 +45,7 @@ Data sources:
 
 from __future__ import annotations
 
-__version__ = '2023.8.30'
+__version__ = '2024.5.10'
 
 __all__ = [
     'Element',
@@ -2123,6 +2123,7 @@ def sqlite_script() -> str:
         >>> con.commit()
         >>> for r in cur.execute("SELECT name FROM element WHERE number=6"):
         ...     str(r[0])
+        ...
         'Carbon'
         >>> con.close()
 
