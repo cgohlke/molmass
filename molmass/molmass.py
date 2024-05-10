@@ -1,6 +1,6 @@
 # molmass.py
 
-# Copyright (c) 1990-2023, Christoph Gohlke
+# Copyright (c) 1990-2024, Christoph Gohlke
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -44,7 +44,7 @@ of the chemical elements.
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD 3-Clause
-:Version: 2023.8.30
+:Version: 2024.5.10
 :DOI: `10.5281/zenodo.7135495 <https://doi.org/10.5281/zenodo.7135495>`_
 
 Quickstart
@@ -76,13 +76,18 @@ Requirements
 This revision was tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython <https://www.python.org>`_ 3.9.13, 3.10.11, 3.11.5, 3.12rc
-- `Flask <https://pypi.org/project/Flask/>`_ 2.3.3 (optional)
-- `Pandas <https://pypi.org/project/pandas/>`_ 1.5.3 (optional)
+- `CPython <https://www.python.org>`_ 3.9.13, 3.10.11, 3.11.9, 3.12.3
+- `Flask <https://pypi.org/project/Flask/>`_ 3.0.3 (optional)
+- `Pandas <https://pypi.org/project/pandas/>`_ 2.2.2 (optional)
 - `wxPython <https://pypi.org/project/wxPython/>`_ 4.2.1 (optional)
 
 Revisions
 ---------
+
+2024.5.10
+
+- Add options to disable parsing groups, oligos, fractions, arithmetic (#14).
+- Add Formula.expanded property.
 
 2023.8.30
 
@@ -239,12 +244,13 @@ Element(
 >>> for e in ELEMENTS:
 ...     e.validate()
 ...     e = eval(repr(e))
+...
 
 """
 
 from __future__ import annotations
 
-__version__ = '2023.8.30'
+__version__ = '2024.5.10'
 
 __all__ = [
     'Composition',
@@ -282,8 +288,7 @@ from functools import cached_property, reduce
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Iterator, Sequence
-    from typing import Callable
+    from collections.abc import Callable, Iterable, Iterator, Sequence
 
     import pandas
 
@@ -401,6 +406,14 @@ class Formula:
         groups:
             Mapping of chemical group name to formula in Hill notation.
             The default is :py:attr:`GROUPS`.
+        parse_groups:
+            Parse chemical group names. Enabled by default.
+        parse_oligos:
+            Parse pure peptide and nucleotide sequences. Enabled by default.
+        parse_fractions:
+            Parse list of mass fractions. Enabled by default.
+        parse_arithmetic:
+            Parse simple arithmetic operators. Enabled by default.
 
     Examples:
         Elements and counts:
@@ -467,10 +480,22 @@ class Formula:
     def __init__(
         self,
         formula: str = '',
-        groups: dict[str, str] | None = None,
         /,
+        groups: dict[str, str] | None = None,
+        *,
+        parse_groups: bool = True,
+        parse_oligos: bool = True,
+        parse_fractions: bool = True,
+        parse_arithmetic: bool = True,
     ) -> None:
-        self._formula = from_string(formula, groups)
+        self._formula = from_string(
+            formula,
+            groups,
+            parse_groups,
+            parse_oligos,
+            parse_fractions,
+            parse_arithmetic,
+        )
         self._formula_nocharge, self._charge = split_charge(self._formula)
 
     @cached_property
@@ -621,6 +646,18 @@ class Formula:
         return from_elements(
             self._elements, charge=self._charge, divisor=self.gcd
         )
+
+    @property
+    def expanded(self) -> str:
+        """Formula string with expanded groups, charges, and sequences.
+
+        The input formula parsed by :py:func:`from_string`.
+
+        >>> Formula('WQ').expanded  # peptide sequence
+        '((C5H8N2O2)(C11H10N2O)H2O)'
+
+        """
+        return self._formula
 
     @cached_property
     def atoms(self) -> int:
@@ -1388,7 +1425,15 @@ class FormulaError(Exception):
         return f"{self.message}\n{self.formula}\n{'.' * self.position}^"
 
 
-def from_string(formula: str, groups: dict[str, str] | None = None, /) -> str:
+def from_string(
+    formula: str,
+    /,
+    groups: dict[str, str] | None = None,
+    parse_groups: bool = True,
+    parse_oligos: bool = True,
+    parse_fractions: bool = True,
+    parse_arithmetic: bool = True,
+) -> str:
     r"""Return formula string from user input string.
 
     Parameters:
@@ -1399,6 +1444,14 @@ def from_string(formula: str, groups: dict[str, str] | None = None, /) -> str:
         groups:
             Mapping of chemical group name to formula in Hill notation.
             The default is :py:attr:`GROUPS`.
+        parse_groups:
+            Parse chemical group names.
+        parse_oligos:
+            Parse pure peptide and nucleotide sequences.
+        parse_fractions:
+            Parse list of mass fractions.
+        parse_arithmetic:
+            Parse simple arithmetic operators.
 
     Returns:
         Chemical formula composed only of element and isotope symbols,
@@ -1410,14 +1463,20 @@ def from_string(formula: str, groups: dict[str, str] | None = None, /) -> str:
     Examples:
         >>> from_string('Valohp')
         '(C5H8NO2)'
+        >>> from_string('Valohp', parse_groups=False)
+        'Valohp'
         >>> from_string('HLeu2OH')
         'H(C6H11NO)2OH'
         >>> from_string('D2O')
         '[2H]2O'
         >>> from_string('O: 0.26, 30Si: 0.74')
         'O2[30Si]3'
+        >>> from_string('O: 0.26, 30Si: 0.74', parse_fractions=False)
+        'O:0(,30Si:0)26()74'
         >>> from_string('PhNH2.HCl')
         '(C6H5)NH2HCl'
+        >>> from_string('PhNH2.HCl', parse_arithmetic=False)
+        '(C6H5)NH2.HCl'
         >>> from_string('CuSO4.5H2O')
         'CuSO4(H2O)5'
         >>> from_string('CuSO4+5*H2O')
@@ -1430,6 +1489,10 @@ def from_string(formula: str, groups: dict[str, str] | None = None, /) -> str:
         '((C10H12N5O5P)(C9H12N3O6P)H2O)'
         >>> from_string('peptide(GG)')
         '((C2H3NO)2H2O)'
+        >>> from_string('WQ')
+        '((C5H8N2O2)(C11H10N2O)H2O)'
+        >>> from_string('WQ', parse_oligos=False)
+        'WQ'
 
     """
     try:
@@ -1437,15 +1500,14 @@ def from_string(formula: str, groups: dict[str, str] | None = None, /) -> str:
     except AttributeError as exc:
         raise ValueError('formula must be a string') from exc
 
-    # abbreviations of common chemical groups
-    if groups is None:
-        groups = GROUPS
-    if groups:
-        for grp in reversed(sorted(groups)):
-            formula = formula.replace(grp, f'({groups[grp]})')
+    if parse_groups:
+        if groups is None:
+            groups = GROUPS
+        if groups:
+            for grp in reversed(sorted(groups)):
+                formula = formula.replace(grp, f'({groups[grp]})')
 
-    # list of mass fractions
-    if ':' in formula and ',' in formula:
+    if parse_fractions and ':' in formula and ',' in formula:
         fractions: dict[str, float] = {}
         try:
             for item in formula.split(','):
@@ -1457,8 +1519,7 @@ def from_string(formula: str, groups: dict[str, str] | None = None, /) -> str:
             ) from exc
         return from_fractions(fractions)
 
-    # oligos and peptides
-    if len(formula) > 1:
+    if parse_oligos and len(formula) > 1:
         fset = set(formula)
         if fset <= set('ATCG') and fset & set('ATG'):
             return from_oligo(formula, 'ssdna')
@@ -1476,24 +1537,24 @@ def from_string(formula: str, groups: dict[str, str] | None = None, /) -> str:
     # charge
     formula, charge = split_charge(formula)
 
-    # arithmetic
-    formula = formula.replace('.', '+')
-    if '+' in formula or '*' in formula:
-        # TODO: document O2+12C is C12O2, not [12C]O2
-        for match in re.findall(
-            r'(?:\+|^)((\d+)\*?(.*?))(?:(?=\+)|$)', formula
-        ):
-            formula = formula.replace(match[0], f'({match[2]}){match[1]}')
-        m = re.search(r'(\+[a-z])', formula)
-        if m:
+    if parse_arithmetic:
+        formula = formula.replace('.', '+')
+        if '+' in formula or '*' in formula:
+            # TODO: document O2+12C is C12O2, not [12C]O2
+            for match in re.findall(
+                r'(?:\+|^)((\d+)\*?(.*?))(?:(?=\+)|$)', formula
+            ):
+                formula = formula.replace(match[0], f'({match[2]}){match[1]}')
+            m = re.search(r'(\+[a-z])', formula)
+            if m:
+                raise FormulaError(
+                    'invalid symbol', formula, formula.index(m[0]) + 1
+                )
+            formula = formula.replace('+', '')
+        if '-' in formula:
             raise FormulaError(
-                'invalid symbol', formula, formula.index(m[0]) + 1
+                'subtraction not allowed', formula, formula.index('-')
             )
-        formula = formula.replace('+', '')
-    if '-' in formula:
-        raise FormulaError(
-            'subtraction not allowed', formula, formula.index('-')
-        )
 
     if charge != 0:
         formula = f'[{formula}]{format_charge(charge)}'
@@ -1526,8 +1587,15 @@ def from_elements(
         'C2[12C]'
 
         >>> from_elements(
-        ...     {'C': {0: 4, 12: 2}}, divisor=2, fmt=('{}', '{}<sub>{}</sub>',
-        ...     '<sup>{}</sup>{}', '<sup>{}</sup>{}<sub>{}</sub>'))
+        ...     {'C': {0: 4, 12: 2}},
+        ...     divisor=2,
+        ...     fmt=(
+        ...         '{}',
+        ...         '{}<sub>{}</sub>',
+        ...         '<sup>{}</sup>{}',
+        ...         '<sup>{}</sup>{}<sub>{}</sub>',
+        ...     ),
+        ... )
         'C<sub>2</sub><sup>12</sup>C'
 
     """
