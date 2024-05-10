@@ -1,6 +1,6 @@
 # elements_gui.py
 
-# Copyright (c) 2005-2022, Christoph Gohlke
+# Copyright (c) 2005-2024, Christoph Gohlke
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -48,16 +48,16 @@ import wx
 from wx.lib import buttons, fancytext, rcsizer
 
 try:
-    from .elements import ELEMENTS, SERIES
+    from .elements import ELEMENTS, SERIES, __version__
 except ImportError:
-    from elements import ELEMENTS, SERIES  # type: ignore
+    from elements import ELEMENTS, SERIES, __version__  # type: ignore
 
 
 class MainApp(wx.App):
     """Main application."""
 
     name = 'Periodic Table of Elements'
-    version = '2022.10.18'
+    version = __version__
     website = 'https://www.cgohlke.com'
     copyright = 'Christoph Gohlke'
     icon = 'icon.png'
