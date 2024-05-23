@@ -44,7 +44,7 @@ of the chemical elements.
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD 3-Clause
-:Version: 2024.5.10
+:Version: 2024.5.24
 :DOI: `10.5281/zenodo.7135495 <https://doi.org/10.5281/zenodo.7135495>`_
 
 Quickstart
@@ -53,7 +53,7 @@ Quickstart
 Install the molmass package and all dependencies from the
 `Python Package Index <https://pypi.org/project/molmass/>`_::
 
-    python -m pip install -U molmass[all]
+    python -m pip install -U "molmass[all]"
 
 Print the console script usage::
 
@@ -83,6 +83,10 @@ This revision was tested with the following requirements and dependencies
 
 Revisions
 ---------
+
+2024.5.24
+
+- Fix GitHub not correctly rendering docstring examples.
 
 2024.5.10
 
@@ -250,7 +254,7 @@ Element(
 
 from __future__ import annotations
 
-__version__ = '2024.5.10'
+__version__ = '2024.5.24'
 
 __all__ = [
     'Composition',
