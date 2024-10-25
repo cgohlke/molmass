@@ -65,11 +65,17 @@ import os
 import re
 import sys
 from html import escape
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from typing import Any
 
 try:
     from . import molmass
+    from .elements import ELEMENTS
 except ImportError:
-    import molmass  # type: ignore
+    import molmass  # type: ignore[no-redef]
+    from elements import ELEMENTS  # type: ignore[no-redef]
 
 PAGE = """<!DOCTYPE html PUBLIC
 "-//W3C//DTD XHTML 1.1 plus MathML 2.0 plus SVG 1.1//EN"
@@ -193,7 +199,7 @@ Source code is available on
 
 
 def response(
-    form,
+    form: Any,
     /,  # for compatibility
     url: str,
     template: str | None = None,
@@ -376,7 +382,7 @@ def analyze(
                         '<tr>',
                         f'<th scope="row">{item.massnumber}</th>',
                         f'<td>{item.mass:.{prec}f}</td>',
-                        f'<td>{item.fraction*100.:.6}</td>',
+                        f'<td>{item.fraction * 100.:.6}</td>',
                         f'<td>{item.intensity:.6}</td>' f'{mz}',
                         '</tr>',
                     )
@@ -412,7 +418,7 @@ def isotopes() -> str:
     )
 
     rows: list[str] = []
-    for ele in molmass.ELEMENTS:
+    for ele in ELEMENTS:
         rows.extend(
             (
                 f'<tr><td><a href="?q={ele.symbol}">{ele.name}</a></td>',
@@ -511,20 +517,20 @@ def cgi(url: str, *, open_browser: bool = True, debug: bool = True) -> int:
     if os.getenv('SERVER_NAME'):
         print('Content-type: text/html\n\n')
         request = cgi.FieldStorage()
-        request.get = request.getfirst  # type: ignore
+        request.get = request.getfirst  # type: ignore[attr-defined]
         print(response(request, url))
     else:
         from http.server import CGIHTTPRequestHandler, HTTPServer
         from urllib.parse import urlparse
 
-        def is_cgi(self) -> bool:
+        def is_cgi(self: Any) -> bool:
             # monkey patch for CGIHTTPRequestHandler.is_cgi
             if filename in self.path:
                 self.cgi_info = '', self.path[1:]
                 return True
             return False
 
-        CGIHTTPRequestHandler.is_cgi = is_cgi  # type: ignore
+        CGIHTTPRequestHandler.is_cgi = is_cgi  # type: ignore[method-assign]
         print('Running CGI script at', url)
         if open_browser:
             webbrowser(url)
