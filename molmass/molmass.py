@@ -827,10 +827,11 @@ class Formula:
                     count = iso[massnumber]
                     if massnumber:
                         mass = ele.isotopes[massnumber].mass * count
-                        symbol = f'{massnumber}{symbol}'
+                        symbol_iso = f'{massnumber}{symbol}'
                     else:
                         mass = ele.mass * count
-                    result.append((symbol, count, mass, mass / self.mass))
+                        symbol_iso = symbol
+                    result.append((symbol_iso, count, mass, mass / self.mass))
         else:
             for symbol in hill_sorted(elements):
                 ele = ELEMENTS[symbol]
