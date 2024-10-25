@@ -44,7 +44,7 @@ of the chemical elements.
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD 3-Clause
-:Version: 2024.5.24
+:Version: 2024.10.25
 :DOI: `10.5281/zenodo.7135495 <https://doi.org/10.5281/zenodo.7135495>`_
 
 Quickstart
@@ -76,17 +76,21 @@ Requirements
 This revision was tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython <https://www.python.org>`_ 3.9.13, 3.10.11, 3.11.9, 3.12.3
+- `CPython <https://www.python.org>`_ 3.10.11, 3.11.9, 3.12.7, 3.13.0
 - `Flask <https://pypi.org/project/Flask/>`_ 3.0.3 (optional)
-- `Pandas <https://pypi.org/project/pandas/>`_ 2.2.2 (optional)
-- `wxPython <https://pypi.org/project/wxPython/>`_ 4.2.1 (optional)
+- `Pandas <https://pypi.org/project/pandas/>`_ 2.2.3 (optional)
+- `wxPython <https://pypi.org/project/wxPython/>`_ 4.2.2 (optional)
 
 Revisions
 ---------
 
+2024.10.25
+
+- Fix composition of formula with multiple isotopes of same element (#16).
+
 2024.5.24
 
-- Fix GitHub not correctly rendering docstring examples.
+- Fix docstring examples not correctly rendered on GitHub.
 
 2024.5.10
 
@@ -254,9 +258,10 @@ Element(
 
 from __future__ import annotations
 
-__version__ = '2024.5.24'
+__version__ = '2024.10.25'
 
 __all__ = [
+    '__version__',
     'Composition',
     'CompositionItem',
     'Formula',
@@ -299,7 +304,7 @@ if TYPE_CHECKING:
 try:
     from .elements import ELECTRON, ELEMENTS, Isotope
 except ImportError:
-    from elements import ELECTRON, ELEMENTS, Isotope  # type: ignore
+    from elements import ELECTRON, ELEMENTS, Isotope  # type: ignore[no-redef]
 
 
 def analyze(
@@ -807,14 +812,15 @@ class Formula:
                 List isotopes separately as opposed to part of an element.
 
         Examples:
-            >>> print(Formula('[12C]C').composition())
+            >>> print(Formula('[12C][13C]C').composition())
             Element  Count  Relative mass  Fraction %
-            C            1      12.010740     50.0224
-            12C          1      12.000000     49.9776
+            C            1      12.010740     32.4491
+            12C          1      12.000000     32.4201
+            13C          1      13.003355     35.1308
 
-            >>> print(Formula('[12C]C').composition(False))
+            >>> print(Formula('[12C][13C]C').composition(False))
             Element  Count  Relative mass  Fraction %
-            C            2      24.010740    100.0000
+            C            3      37.014095    100.0000
 
         """
         elements = self._elements
@@ -827,10 +833,11 @@ class Formula:
                     count = iso[massnumber]
                     if massnumber:
                         mass = ele.isotopes[massnumber].mass * count
-                        symbol = f'{massnumber}{symbol}'
+                        symbol_iso = f'{massnumber}{symbol}'
                     else:
                         mass = ele.mass * count
-                    result.append((symbol, count, mass, mass / self.mass))
+                        symbol_iso = symbol
+                    result.append((symbol_iso, count, mass, mass / self.mass))
         else:
             for symbol in hill_sorted(elements):
                 ele = ELEMENTS[symbol]
@@ -974,7 +981,10 @@ class Formula:
         Formula('[(HO)2]2-')
 
         """
-        if not isinstance(number, int) or number < 1:
+        if (
+            not isinstance(number, int)  # type: ignore[redundant-expr]
+            or number < 1
+        ):
             raise TypeError('can only multiply with positive number')
         return Formula(
             join_charge(
@@ -1367,7 +1377,7 @@ class Spectrum:
             result.append(
                 f'{entry.massnumber:<{a}d}'
                 f'  {entry.mass:>13.{precision}f}'
-                f' {entry.fraction*100:11.6f}'
+                f' {entry.fraction * 100:11.6f}'
                 f' {entry.intensity:12.6f}'
                 f'{mz}'.strip()
             )
@@ -2440,7 +2450,7 @@ def main(argv: list[str] | None = None, /) -> int:
         try:
             from .web import main as web_main
         except ImportError:
-            from web import main as web_main  # type: ignore
+            from web import main as web_main  # type: ignore[no-redef]
 
         if formula_list:
             form = {'q': ''.join(formula_list)}
@@ -2456,7 +2466,7 @@ def main(argv: list[str] | None = None, /) -> int:
         try:
             import molmass.molmass as m
         except ImportError:
-            m = None  # type: ignore
+            m = None  # type: ignore[assignment]
         doctest.testmod(m, optionflags=doctest.ELLIPSIS)
         return 0
     if settings.test:
