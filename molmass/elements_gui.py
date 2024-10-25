@@ -50,7 +50,7 @@ from wx.lib import buttons, fancytext, rcsizer
 try:
     from .elements import ELEMENTS, SERIES, __version__
 except ImportError:
-    from elements import ELEMENTS, SERIES, __version__  # type: ignore
+    from elements import ELEMENTS, SERIES, __version__
 
 
 class MainApp(wx.App):
@@ -360,7 +360,7 @@ class PeriodicPanel(wx.Panel):
 
     def OnTimer(self, evt):
         button = self.buttons[self.selected]
-        button.SetToggle(button.up)  # type: ignore
+        button.SetToggle(button.up)
 
     def OnSelect(self, evt):
         self.GetParent().SetSelection(evt.GetId() - 101)
@@ -370,7 +370,7 @@ class PeriodicPanel(wx.Panel):
         if self.selected == select:
             return
         # reset old selection
-        self.buttons[self.selected].SetToggle(False)  # type: ignore
+        self.buttons[self.selected].SetToggle(False)
         # highlight new selection
         self.selected = select
         self.buttons[select].SetToggle(True)
@@ -1083,3 +1083,6 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+# mypy: allow-untyped-defs, allow-untyped-calls
+# mypy: disable-error-code="misc, attr-defined, no-redef"
