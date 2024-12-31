@@ -1,6 +1,6 @@
 # elements_gui.py
 
-# Copyright (c) 2005-2024, Christoph Gohlke
+# Copyright (c) 2005-2025, Christoph Gohlke
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -742,9 +742,9 @@ class DetailsPanel(wx.Panel):
         for index, massnum in enumerate(sorted(ele.isotopes)):
             iso = ele.isotopes[massnum]
             self.isotopes.ctrl.Append(
-                '{:3}:  {:8.4f} , {:8.4f}%'.format(
-                    massnum, iso.mass, iso.abundance * 100.0
-                )
+                f'{massnum:3}:  '
+                f'{iso.mass:8.4f} , '
+                f'{iso.abundance * 100.0:8.4f}%'
             )
             if massnum == ele.nominalmass:
                 self.isotopes.ctrl.SetSelection(index)
