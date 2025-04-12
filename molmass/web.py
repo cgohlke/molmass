@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # molmass/web.py
 
-# Copyright (c) 2005-2024, Christoph Gohlke
+# Copyright (c) 2005-2025, Christoph Gohlke
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -517,7 +517,7 @@ def cgi(url: str, *, open_browser: bool = True, debug: bool = True) -> int:
     if os.getenv('SERVER_NAME'):
         print('Content-type: text/html\n\n')
         request = cgi.FieldStorage()
-        request.get = request.getfirst  # type: ignore[attr-defined]
+        request.get = request.getfirst
         print(response(request, url))
     else:
         from http.server import CGIHTTPRequestHandler, HTTPServer
