@@ -1,6 +1,6 @@
 # molmass/elements.py
 
-# Copyright (c) 2005-2024, Christoph Gohlke
+# Copyright (c) 2005-2025, Christoph Gohlke
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -45,7 +45,7 @@ Data sources:
 
 from __future__ import annotations
 
-__version__ = '2024.x.x'
+__version__ = '2025.4.14'
 
 __all__ = [
     'Element',
@@ -2050,9 +2050,11 @@ ELEMENTS: Elements = Elements(
         isotopes={276: Isotope(276.15159, 1.0, 276)},
     ),
 )
+"""Ordered dict of Elements with lookup by number, symbol, and name."""
 # fmt: on
 
-ELEMENTARY_CHARGE: float = 1.602176634e-19  # coulomb
+ELEMENTARY_CHARGE: float = 1.602176634e-19
+"""Elementary charge in coulombs."""
 
 ELECTRON: Particle = Particle('Electron', 5.48579909065e-4, -ELEMENTARY_CHARGE)
 """Electron particle."""
@@ -2121,7 +2123,7 @@ def sqlite_script() -> str:
         >>> con = sqlite3.connect(':memory:')
         >>> cur = con.executescript(sqlite_script())
         >>> con.commit()
-        >>> for r in cur.execute("SELECT name FROM element WHERE number=6"):
+        >>> for r in cur.execute('SELECT name FROM element WHERE number=6'):
         ...     str(r[0])
         ...
         'Carbon'
