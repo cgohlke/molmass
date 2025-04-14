@@ -1,6 +1,6 @@
 # molmass.py
 
-# Copyright (c) 1990-2024, Christoph Gohlke
+# Copyright (c) 1990-2025, Christoph Gohlke
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -44,7 +44,7 @@ of the chemical elements.
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD 3-Clause
-:Version: 2024.10.25
+:Version: 2025.4.14
 :DOI: `10.5281/zenodo.7135495 <https://doi.org/10.5281/zenodo.7135495>`_
 
 Quickstart
@@ -76,13 +76,18 @@ Requirements
 This revision was tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython <https://www.python.org>`_ 3.10.11, 3.11.9, 3.12.7, 3.13.0
-- `Flask <https://pypi.org/project/Flask/>`_ 3.0.3 (optional)
+- `CPython <https://www.python.org>`_ 3.10.11, 3.11.9, 3.12.10, 3.13.3
+- `Flask <https://pypi.org/project/Flask/>`_ 3.1.0 (optional)
 - `Pandas <https://pypi.org/project/pandas/>`_ 2.2.3 (optional)
-- `wxPython <https://pypi.org/project/wxPython/>`_ 4.2.2 (optional)
+- `wxPython <https://pypi.org/project/wxPython/>`_ 4.2.3 (optional)
 
 Revisions
 ---------
+
+2025.4.14
+
+- Add mass_charge_ratio helper function (#17).
+- Drop support for Python 3.9.
 
 2024.10.25
 
@@ -101,7 +106,7 @@ Revisions
 
 - Fix linting issues.
 - Add py.typed marker.
-- Remove support for Python 3.8.
+- Drop support for Python 3.8.
 
 2023.4.10
 
@@ -126,14 +131,14 @@ Revisions
 - Add options to specify URL of web application and not opening web browser.
 - Convert to Google style docstrings.
 - Add type hints.
-- Remove support for Python 3.7.
+- Drop support for Python 3.7.
 
 2021.6.18
 
 - Add Particle types to elements (#5).
 - Fix molmass_web failure on WSL2 (#9).
 - Fix elements_gui layout issue.
-- Remove support for Python 3.6.
+- Drop support for Python 3.6.
 
 2020.6.10
 
@@ -144,7 +149,7 @@ Revisions
 
 - Update elements atomic weights and isotopic compositions from NIST.
 - Move element descriptions into separate module.
-- Remove support for Python 2.7 and 3.5.
+- Drop support for Python 2.7 and 3.5.
 
 2018.8.15
 
@@ -258,7 +263,7 @@ Element(
 
 from __future__ import annotations
 
-__version__ = '2024.10.25'
+__version__ = '2025.4.14'
 
 __all__ = [
     '__version__',
@@ -279,6 +284,7 @@ __all__ = [
     'hill_sorted',
     'join_charge',
     'main',
+    'mass_charge_ratio',
     'split_charge',
     'test',
     'AMINOACIDS',
@@ -767,6 +773,8 @@ class Formula:
     def mz(self) -> float:
         """Mass-to-charge ratio.
 
+        Using the average relative molecular mass.
+
         >>> Formula('H').mz
         1.007941
         >>> Formula('H+').mz
@@ -775,9 +783,7 @@ class Formula:
         48.03175...
 
         """
-        if self._charge == 0:
-            return self.mass
-        return self.mass / abs(self._charge)
+        return mass_charge_ratio(self.mass, self._charge)
 
     @cached_property
     def isotope(self) -> Isotope:
@@ -1396,21 +1402,21 @@ class FormulaError(Exception):
         >>> Formula('abc').formula
         Traceback (most recent call last):
          ...
-        molmass.molmass.FormulaError: unexpected character 'a'
+        molmass.FormulaError: unexpected character 'a'
         abc
         ^
 
         >>> Formula('(H2O)2-H2O').formula
         Traceback (most recent call last):
          ...
-        molmass.molmass.FormulaError: subtraction not allowed
+        molmass.FormulaError: subtraction not allowed
         (H2O)2-H2O
         ......^
 
         >>> Formula('[11C]').formula
         Traceback (most recent call last):
          ...
-        molmass.molmass.FormulaError: unknown isotope '11C'
+        molmass.FormulaError: unknown isotope '11C'
         [11C]
         .^
 
@@ -1816,6 +1822,28 @@ def from_oligo(sequence: str, dtype: str = 'ssdna', /) -> str:
     return join_charge(formula, charge)
 
 
+def mass_charge_ratio(mass: float, charge: int, /) -> float:
+    """Return mass-to-charge ratio.
+
+    Parameters:
+        mass: Mass to divide by charge.
+        charge: Charge number in units of elementary charge.
+
+    Examples:
+        >>> mass_charge_ratio(1.0, -2)
+        0.5
+        >>> mass_charge_ratio(1.0, 1)
+        1.0
+        >>> mass_charge_ratio(1.0, 0)
+        1.0
+        >>> f = Formula('SO4_2-')
+        >>> mass_charge_ratio(f.monoisotopic_mass, f.charge)
+        47.976...
+
+    """
+    return mass if charge == 0 else mass / abs(charge)
+
+
 def hill_sorted(symbols: Iterable[str], /) -> Iterator[str]:
     """Return iterator over element symbols in order of Hill notation.
 
@@ -2215,6 +2243,8 @@ def test(verbose: bool = False) -> None:
 
     Parameters:
         verbose: Print status of testing.
+
+    >>> test()
 
     """
     formula: str
