@@ -237,7 +237,7 @@ class MainFrame(wx.Frame):
 
     def OnExit(self, evt):
         self.Close()
-        if __name__ == "__main__":
+        if __name__ == '__main__':
             sys.exit(0)
         return self.selected
 
