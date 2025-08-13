@@ -74,8 +74,9 @@ try:
     from . import molmass
     from .elements import ELEMENTS
 except ImportError:
-    import molmass  # type: ignore[no-redef]
     from elements import ELEMENTS  # type: ignore[no-redef]
+
+    import molmass  # type: ignore[no-redef]
 
 PAGE = """<!DOCTYPE html PUBLIC
 "-//W3C//DTD XHTML 1.1 plus MathML 2.0 plus SVG 1.1//EN"
