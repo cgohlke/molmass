@@ -43,8 +43,8 @@ The library includes a database of physicochemical and descriptive properties
 of the chemical elements.
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
-:License: BSD 3-Clause
-:Version: 2025.4.14
+:License: BSD-3-Clause
+:Version: 2025.9.4
 :DOI: `10.5281/zenodo.7135495 <https://doi.org/10.5281/zenodo.7135495>`_
 
 Quickstart
@@ -76,13 +76,19 @@ Requirements
 This revision was tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython <https://www.python.org>`_ 3.10.11, 3.11.9, 3.12.10, 3.13.3
-- `Flask <https://pypi.org/project/Flask/>`_ 3.1.0 (optional)
-- `Pandas <https://pypi.org/project/pandas/>`_ 2.2.3 (optional)
+- `CPython <https://www.python.org>`_ 3.11.9, 3.12.10, 3.13.7, 3.14.0rc
+- `Flask <https://pypi.org/project/Flask/>`_ 3.1.2 (optional)
+- `Pandas <https://pypi.org/project/pandas/>`_ 2.3.2 (optional)
 - `wxPython <https://pypi.org/project/wxPython/>`_ 4.2.3 (optional)
 
 Revisions
 ---------
+
+2025.9.4
+
+- Precompile regex patterns.
+- Remove doctest command line option.
+- Drop support for Python 3.10, support Python 3.14.
 
 2025.4.14
 
@@ -263,7 +269,7 @@ Element(
 
 from __future__ import annotations
 
-__version__ = '2025.4.14'
+__version__ = '2025.9.4'
 
 __all__ = [
     '__version__',
@@ -364,6 +370,7 @@ def analyze(
         f = Formula(formula)
         c = f.composition()
         if f.atoms < maxatoms:
+            # avoid expensive spectrum calculation for many atoms
             s = f.spectrum(min_intensity=min_intensity)
         else:
             s = None
@@ -991,7 +998,7 @@ class Formula:
             not isinstance(number, int)  # type: ignore[redundant-expr]
             or number < 1
         ):
-            raise TypeError('can only multiply with positive number')
+            raise TypeError('can only multiply with positive integer')
         return Formula(
             join_charge(
                 f'({self._formula_nocharge}){number}', self._charge * number
@@ -1551,8 +1558,8 @@ def from_string(
             for match in re.findall(dtype + r'\((.*?)\)', formula):
                 formula = formula.replace(f'{dtype}({match})', func(match))
 
-    # Deuterium
-    formula = re.sub('(D)(?![a-z])', '[2H]', formula)
+    # replace Deuterium
+    formula = _DEUTERIUM_PATTERN.sub('[2H]', formula)
 
     # charge
     formula, charge = split_charge(formula)
@@ -1561,11 +1568,10 @@ def from_string(
         formula = formula.replace('.', '+')
         if '+' in formula or '*' in formula:
             # TODO: document O2+12C is C12O2, not [12C]O2
-            for match in re.findall(
-                r'(?:\+|^)((\d+)\*?(.*?))(?:(?=\+)|$)', formula
-            ):
+            for match in _ARITHMETIC_PATTERN.findall(formula):
                 formula = formula.replace(match[0], f'({match[2]}){match[1]}')
-            m = re.search(r'(\+[a-z])', formula)
+            # invalid lower case after operator
+            m = _ARITHMETIC_INVALID_PATTERN.search(formula)
             if m:
                 raise FormulaError(
                     'invalid symbol', formula, formula.index(m[0]) + 1
@@ -1757,7 +1763,7 @@ def from_peptide(sequence: str, /) -> str:
     """Return chemical formula for polymer of unmodified amino acids.
 
     Parameters:
-        sequence: Perptide sequence.
+        sequence: Peptide sequence.
 
     Examples:
         >>> from_peptide('GG')
@@ -1962,7 +1968,8 @@ def split_charge(formula: str, /) -> tuple[str, int]:
 
     """
     charge = 0
-    m = re.search(r'([\]_])([0-9]{1,})([+-]{1,})$', formula)
+    # matches ]2+, _2-
+    m = _CHARGE_PATTERN.search(formula)
     if m:
         m_delim, m_count, m_sign = m.groups()
         if m_count == '':
@@ -1970,13 +1977,15 @@ def split_charge(formula: str, /) -> tuple[str, int]:
         else:
             charge = int(f'{m_sign}{m_count}')
     else:
-        m = re.search(r'([+-]{1})([0-9]{1,})$', formula)
+        # matches +2, -2
+        m = _CHARGE_NO_DELIM_PATTERN.search(formula)
         if m:
             m_sign, m_count = m.groups()
             m_delim = f'{m_sign}{m_count}'
             charge = int(m_delim)
         else:
-            m = re.search(r'([\]_]?)([+-]{1,})$', formula)
+            # matches _+, _--, +, --
+            m = _CHARGE_NO_COUNT_PATTERN.search(formula)
             charge = 0
             if m:
                 m_delim, m_sign = m.groups()
@@ -2053,7 +2062,15 @@ def format_charge(charge: int, prefix: str = '', /) -> str:
     return f'{prefix}{count}{sign}'
 
 
-# Common chemical groups
+# precompile regex patterns
+_DEUTERIUM_PATTERN = re.compile(r'(D)(?![a-z])')
+_ARITHMETIC_PATTERN = re.compile(r'(?:\+|^)((\d+)\*?(.*?))(?:(?=\+)|$)')
+_ARITHMETIC_INVALID_PATTERN = re.compile(r'(\+[a-z])')
+_CHARGE_PATTERN = re.compile(r'([\]_])([0-9]{1,})([+-]{1,})$')
+_CHARGE_NO_DELIM_PATTERN = re.compile(r'([+-]{1})([0-9]{1,})$')
+_CHARGE_NO_COUNT_PATTERN = re.compile(r'([\]_]?)([+-]{1,})$')
+
+# common chemical groups
 GROUPS: dict[str, str] = {
     'Abu': 'C4H7NO',
     'Acet': 'C2H3O',
@@ -2228,7 +2245,7 @@ NUCLEOTIDE_COMPLEMENTS: dict[str, str] = {
     'G': 'C',
 }
 
-# Formula preprocessors
+# formula preprocessors
 PREPROCESSORS: dict[str, Callable[[str], str]] = {
     'peptide': from_peptide,
     'ssdna': lambda x: from_oligo(x, 'ssdna'),
@@ -2465,13 +2482,6 @@ def main(argv: list[str] | None = None, /) -> int:
         default=False,
         help='test the module',
     )
-    opt(
-        '--doctest',
-        dest='doctest',
-        action='store_true',
-        default=False,
-        help='run the internal tests',
-    )
     opt('-v', '--verbose', dest='verbose', action='store_true', default=False)
 
     settings, formula_list = parser.parse_args()
@@ -2490,15 +2500,6 @@ def main(argv: list[str] | None = None, /) -> int:
         return web_main(
             url=settings.url, open_browser=not settings.nobrowser, form=form
         )
-    if settings.doctest:
-        import doctest
-
-        try:
-            import molmass.molmass as m
-        except ImportError:
-            m = None  # type: ignore[assignment]
-        doctest.testmod(m, optionflags=doctest.ELLIPSIS)
-        return 0
     if settings.test:
         test(settings.verbose)
         return 0
@@ -2516,22 +2517,6 @@ def main(argv: list[str] | None = None, /) -> int:
 
     return 0
 
-
-if '--doctest' in sys.argv:
-    # enable doctest for @cached_property
-    __test__ = {  # noqa
-        'Formula._elements': Formula._elements,
-        'Formula.formula': Formula.formula,
-        'Formula.empirical': Formula.empirical,
-        'Formula.atoms': Formula.atoms,
-        'Formula.gcd': Formula.gcd,
-        'Formula.mass': Formula.mass,
-        'Formula.isotope': Formula.isotope,
-        'Spectrum.range': Spectrum.range,
-        'Spectrum.peak': Spectrum.peak,
-        'Spectrum.mean': Spectrum.mean,
-        'Composition.total': Composition.total,
-    }
 
 if __name__ == '__main__':
     sys.exit(main())
