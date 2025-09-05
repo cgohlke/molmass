@@ -32,7 +32,7 @@
 """Properties of the chemical elements.
 
 Chemical elements, particles, and isotopes are represented as Python class
-instances. Physicochemical and descriptive properties of are accessible as
+instances. Physicochemical and descriptive properties are accessible as
 attributes.
 
 Data sources:
@@ -45,7 +45,7 @@ Data sources:
 
 from __future__ import annotations
 
-__version__ = '2025.4.14'
+__version__ = '2025.9.4'
 
 __all__ = [
     'Element',
@@ -103,13 +103,13 @@ class Element:
     """Electron affinity in eV."""
 
     covrad: float
-    """Covalent radius in Angstrom."""
+    """Covalent radius in angstrom."""
 
     atmrad: float
-    """Atomic radius in Angstrom."""
+    """Atomic radius in angstrom."""
 
     vdwrad: float
-    """ Van der Waals radius in Angstrom."""
+    """Van der Waals radius in angstrom."""
 
     tboil: float
     """Boiling temperature in K."""
@@ -193,10 +193,14 @@ class Element:
 
     def validate(self) -> None:
         """Check consistency of data. Raise ValueError on failure."""
-        assert self.period in PERIODS
-        assert self.group in GROUPS
-        assert self.block in BLOCKS
-        assert self.series in SERIES
+        if self.period not in PERIODS:
+            raise ValueError(f'{self.symbol} - invalid period: {self.period}')
+        if self.group not in GROUPS:
+            raise ValueError(f'{self.symbol} - invalid group: {self.group}')
+        if self.block not in BLOCKS:
+            raise ValueError(f'{self.symbol} - invalid block: {self.block}')
+        if self.series not in SERIES:
+            raise ValueError(f'{self.symbol} - invalid series: {self.series}')
 
         if self.number != self.protons:
             raise ValueError(
@@ -2050,7 +2054,20 @@ ELEMENTS: Elements = Elements(
         isotopes={276: Isotope(276.15159, 1.0, 276)},
     ),
 )
-"""Ordered dict of Elements with lookup by number, symbol, and name."""
+"""Collection of chemical elements with lookup by number, symbol, and name.
+
+An ordered collection of Element instances with lookup by
+atomic number (int), chemical symbol (str), or element name (str).
+
+Examples:
+    >>> ELEMENTS[6]  # by atomic number
+    Element(6, 'C', 'Carbon', ...)
+    >>> ELEMENTS['C']  # by symbol
+    Element(6, 'C', 'Carbon', ...)
+    >>> ELEMENTS['Carbon']  # by name
+    Element(6, 'C', 'Carbon', ...)
+
+"""
 # fmt: on
 
 ELEMENTARY_CHARGE: float = 1.602176634e-19
