@@ -16,8 +16,8 @@ The library includes a database of physicochemical and descriptive properties
 of the chemical elements.
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
-:License: BSD 3-Clause
-:Version: 2025.4.14
+:License: BSD-3-Clause
+:Version: 2025.9.4
 :DOI: `10.5281/zenodo.7135495 <https://doi.org/10.5281/zenodo.7135495>`_
 
 Quickstart
@@ -49,13 +49,19 @@ Requirements
 This revision was tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython <https://www.python.org>`_ 3.10.11, 3.11.9, 3.12.10, 3.13.3
-- `Flask <https://pypi.org/project/Flask/>`_ 3.1.0 (optional)
-- `Pandas <https://pypi.org/project/pandas/>`_ 2.2.3 (optional)
+- `CPython <https://www.python.org>`_ 3.11.9, 3.12.10, 3.13.7, 3.14.0rc
+- `Flask <https://pypi.org/project/Flask/>`_ 3.1.2 (optional)
+- `Pandas <https://pypi.org/project/pandas/>`_ 2.3.2 (optional)
 - `wxPython <https://pypi.org/project/wxPython/>`_ 4.2.3 (optional)
 
 Revisions
 ---------
+
+2025.9.4
+
+- Precompile regex patterns.
+- Remove doctest command line option.
+- Drop support for Python 3.10, support Python 3.14.
 
 2025.4.14
 
