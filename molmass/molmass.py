@@ -44,7 +44,7 @@ of the chemical elements.
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD-3-Clause
-:Version: 2025.9.4
+:Version: 2025.11.11
 :DOI: `10.5281/zenodo.7135495 <https://doi.org/10.5281/zenodo.7135495>`_
 
 Quickstart
@@ -76,13 +76,19 @@ Requirements
 This revision was tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython <https://www.python.org>`_ 3.11.9, 3.12.10, 3.13.7, 3.14.0rc
+- `CPython <https://www.python.org>`_ 3.11.9, 3.12.10, 3.13.9, 3.14.0
 - `Flask <https://pypi.org/project/Flask/>`_ 3.1.2 (optional)
-- `Pandas <https://pypi.org/project/pandas/>`_ 2.3.2 (optional)
-- `wxPython <https://pypi.org/project/wxPython/>`_ 4.2.3 (optional)
+- `Pandas <https://pypi.org/project/pandas/>`_ 2.3.3 (optional)
+- `wxPython <https://pypi.org/project/wxPython/>`_ 4.2.4 (optional)
 
 Revisions
 ---------
+
+2025.11.11
+
+- Allow empty formulas (breaking).
+- Derive FormulaError from ValueError.
+- Move tests to separate test module.
 
 2025.9.4
 
@@ -262,14 +268,13 @@ Element(
 14693.181589001...
 >>> for e in ELEMENTS:
 ...     e.validate()
-...     e = eval(repr(e))
 ...
 
 """
 
 from __future__ import annotations
 
-__version__ = '2025.9.4'
+__version__ = '2025.11.11'
 
 __all__ = [
     '__version__',
@@ -292,7 +297,6 @@ __all__ = [
     'main',
     'mass_charge_ratio',
     'split_charge',
-    'test',
     'AMINOACIDS',
     'DEOXYNUCLEOTIDES',
     'GROUPS',
@@ -389,7 +393,7 @@ def analyze(
             'Monoisotopic mass: '
             f'{f.isotope.mass:.{prec}f} ({f.isotope.abundance * 100:.3f}%)'
         )
-        if s is not None:
+        if s is not None and len(s) > 0:
             result.append(
                 'Most abundant mass: '
                 f'{s.peak.mass:.{prec}f} ({s.peak.fraction * 100:.3f}%)'
@@ -401,9 +405,8 @@ def analyze(
         if len(c) > 1:
             result.extend(('\nElemental Composition\n', str(c)))
 
-        if s is not None:
-            if len(s) > 1:
-                result.append(f'\nMass Distribution\n\n{s}')
+        if s is not None and len(s) > 1:
+            result.append(f'\nMass Distribution\n\n{s}')
 
     except Exception as exc:
         if debug:
@@ -436,9 +439,15 @@ class Formula:
             Parse list of mass fractions. Enabled by default.
         parse_arithmetic:
             Parse simple arithmetic operators. Enabled by default.
+        allow_empty:
+            If False, raise :py:class:`FormulaError` for empty formulas.
+            Enabled by default.
 
     Examples:
         Elements and counts:
+
+        >>> Formula('')
+        Formula('')
 
         >>> Formula('H2O')
         Formula('H2O')
@@ -509,6 +518,7 @@ class Formula:
         parse_oligos: bool = True,
         parse_fractions: bool = True,
         parse_arithmetic: bool = True,
+        allow_empty: bool = True,
     ) -> None:
         self._formula = from_string(
             formula,
@@ -519,6 +529,8 @@ class Formula:
             parse_arithmetic,
         )
         self._formula_nocharge, self._charge = split_charge(self._formula)
+        if not allow_empty and not self._formula_nocharge:
+            raise FormulaError('empty formula', formula, 0)
 
     @cached_property
     def _elements(self) -> dict[str, dict[int, int]]:
@@ -540,7 +552,7 @@ class Formula:
         """
         formula = self._formula_nocharge
         if not formula:
-            raise FormulaError('empty formula', formula, 0)
+            return {}
 
         validchars = set('([{<123456789ABCDEFGHIKLMNOPRSTUVWXYZ')
 
@@ -932,6 +944,9 @@ class Formula:
         spectrum: dict[int, list[float]] = {0: [0.0, 1.0, 0.0]}
         elements: dict[str, dict[int, int]] = self._elements
 
+        if not elements:
+            return Spectrum({}, self._charge)
+
         for symbol, massnumber_counts in elements.items():
             ele = ELEMENTS[symbol]
             for massnumber, count in massnumber_counts.items():
@@ -1270,6 +1285,10 @@ class Spectrum:
     def __init__(
         self, spectrum: dict[int, list[float]], /, charge: int = 0
     ) -> None:
+        self._charge = charge
+        if not spectrum:
+            self._spectrum = {}
+            return
         mz = 1.0 / (1 if charge == 0 else abs(charge))
         intensity = 100 / max(v[1] for v in spectrum.values())
         self._spectrum = {
@@ -1282,16 +1301,19 @@ class Spectrum:
             )
             for massnumber, entry in sorted(spectrum.items())
         }
-        self._charge = charge
 
     @cached_property
     def peak(self) -> SpectrumEntry:
         """Most abundant entry.
 
+        Raise ValueError if spectrum is empty.
+
         >>> Formula('C8H10N4O2').spectrum().peak.mass
         194.0803...
 
         """
+        if not self._spectrum:
+            raise ValueError('spectrum is empty')
         return max(self._spectrum.values(), key=lambda x: x.fraction)
 
     @cached_property
@@ -1308,10 +1330,14 @@ class Spectrum:
     def range(self) -> tuple[int, int]:
         """Smallest and largest massnumbers.
 
+        Raise ValueError if spectrum is empty.
+
         >>> Formula('C8H10N4O2').spectrum().range
         (194, 205)
 
         """
+        if not self._spectrum:
+            raise ValueError('spectrum is empty')
         return min(self._spectrum.keys()), max(self._spectrum.keys())
 
     def dataframe(self) -> pandas.DataFrame:
@@ -1375,8 +1401,11 @@ class Spectrum:
         return iter(self._spectrum)
 
     def __repr__(self) -> str:
+        charge = f', {self._charge}' if self._charge != 0 else ''
+        if len(self._spectrum) == 0:
+            return f'Spectrum({{}}{charge})'
         item = list(list(self._spectrum.values())[0].astuple())
-        return '<Spectrum({' + f'{item[0]!r}: {item!r}, ...' + '})>'
+        return '<Spectrum({' + f'{item[0]!r}: {item!r}, ...' + '}{charge})>'
 
     def __str__(self) -> str:
         if not self._spectrum:
@@ -1397,7 +1426,7 @@ class Spectrum:
         return '\n'.join(result)
 
 
-class FormulaError(Exception):
+class FormulaError(ValueError):
     """Error in chemical formula.
 
     Parameters:
@@ -1409,21 +1438,21 @@ class FormulaError(Exception):
         >>> Formula('abc').formula
         Traceback (most recent call last):
          ...
-        molmass.FormulaError: unexpected character 'a'
+        molmass.molmass.FormulaError: unexpected character 'a'
         abc
         ^
 
         >>> Formula('(H2O)2-H2O').formula
         Traceback (most recent call last):
          ...
-        molmass.FormulaError: subtraction not allowed
+        molmass.molmass.FormulaError: subtraction not allowed
         (H2O)2-H2O
         ......^
 
         >>> Formula('[11C]').formula
         Traceback (most recent call last):
          ...
-        molmass.FormulaError: unknown isotope '11C'
+        molmass.molmass.FormulaError: unknown isotope '11C'
         [11C]
         .^
 
@@ -1444,7 +1473,7 @@ class FormulaError(Exception):
         self.position = position
         self.message = message
         self.formula = formula
-        Exception.__init__(self, message, formula, position)
+        ValueError.__init__(self, message, formula, position)
 
     def __str__(self) -> str:
         if self.position < 0:
@@ -1486,6 +1515,7 @@ def from_string(
 
     Raises:
         FormulaError: Invalid formula.
+        TypeError: Non-string formula.
 
     Examples:
         >>> from_string('Valohp')
@@ -1525,7 +1555,7 @@ def from_string(
     try:
         formula = formula.strip().replace(' ', '')
     except AttributeError as exc:
-        raise ValueError('formula must be a string') from exc
+        raise TypeError('formula must be a string') from exc
 
     if parse_groups:
         if groups is None:
@@ -1883,6 +1913,8 @@ def gcd(numbers: Iterable[int], /) -> int:
         numbers: Integer numbers.
 
     Examples:
+        >>> gcd([])
+        1
         >>> gcd([4])
         4
         >>> gcd([3, 6])
@@ -1898,7 +1930,10 @@ def gcd(numbers: Iterable[int], /) -> int:
             a, b = b, a % b
         return a
 
-    return reduce(_gcd, set(numbers))
+    try:
+        return reduce(_gcd, set(numbers))
+    except TypeError:
+        return 1
 
 
 def precision_digits(f: float, width: int, /) -> int:
@@ -1909,6 +1944,8 @@ def precision_digits(f: float, width: int, /) -> int:
         width: Maximum length of printed number.
 
     Examples:
+        >>> precision_digits(0.0, 5)
+        3
         >>> precision_digits(-0.12345678, 5)
         2
         >>> precision_digits(1.23456789, 5)
@@ -1919,7 +1956,11 @@ def precision_digits(f: float, width: int, /) -> int:
         1
 
     """
-    precision = math.log(abs(f), 10)
+    try:
+        precision = math.log(abs(f), 10)
+    except ValueError:
+        # math domain error
+        precision = 0.0
     precision = max(precision, 0)
     precision = width - int(math.floor(precision))
     precision -= 3 if f < 0 else 2  # sign and decimal point
@@ -1973,7 +2014,7 @@ def split_charge(formula: str, /) -> tuple[str, int]:
     if m:
         m_delim, m_count, m_sign = m.groups()
         if m_count == '':
-            charge = int(f'{m_sign}1')
+            charge = int(f'{m_sign}1')  # unreachable?
         else:
             charge = int(f'{m_sign}{m_count}')
     else:
@@ -2255,179 +2296,6 @@ PREPROCESSORS: dict[str, Callable[[str], str]] = {
 }
 
 
-def test(verbose: bool = False) -> None:
-    """Test module.
-
-    Parameters:
-        verbose: Print status of testing.
-
-    >>> test()
-
-    """
-    formula: str
-    empirical: str
-    mass: float
-
-    f = Formula('EtOH')
-    assert f.formula == 'C2H6O'
-    assert f.empirical == 'C2H6O'
-    assert f.mass == 46.068531
-    assert f.atoms == 9
-    assert f.gcd == 1
-    assert f.isotope.mass == 46.041864812949996
-    assert f.isotope.massnumber == 46
-    assert f.isotope.abundance == 0.9756627354527866
-    assert f.composition().astuple() == (
-        ('C', 2, 24.02148, 0.5214292593788155),
-        ('H', 6, 6.047646, 0.13127499116479316),
-        ('O', 1, 15.999405, 0.34729574945639136),
-    )
-    spectrum = f.spectrum(min_fraction=1e-9, min_intensity=1e-9)
-    assert spectrum.asdict() == {
-        46: (46.04186481295, 0.9756627354527866, 100.0, 46.04186481295),
-        47: (
-            47.04532293299781,
-            0.022149945780234485,
-            2.2702461593918635,
-            47.04532293299781,
-        ),
-        48: (
-            48.04629172951169,
-            0.002142167346900965,
-            0.21956023009393977,
-            48.04629172951169,
-        ),
-        49: (
-            49.04956894435918,
-            4.4886295288353736e-05,
-            0.004600595437061851,
-            49.04956894435918,
-        ),
-        50: (
-            50.05315154462678,
-            2.6452603656753454e-07,
-            2.711244643824313e-05,
-            50.05315154462678,
-        ),
-        51: (
-            51.05909655531064,
-            1.6186163397759485e-10,
-            1.6589916586542372e-08,
-            51.05909655531064,
-        ),
-    }, spectrum.asdict()
-
-    assert abs(spectrum.mean - 46.06852122027406) < 1e-9, spectrum.mean
-    assert spectrum.peak.astuple() == (
-        46,
-        46.04186481295,
-        0.9756627354527866,
-        100.0,
-        46.04186481295,
-    ), spectrum.peak.astuple()
-
-    # these formulas should pass
-    for formula, empirical, mass in [
-        (''.join(e.symbol for e in ELEMENTS), '', 14693.181589000998),
-        ('12C', '[12C]', 12.0),
-        ('12CC', 'C[12C]', 24.0107),
-        ('SO4_2-', '[O4S]2-', 96.06351715981813),
-        ('[CHNOP[13C]]2-', '[C[13C]HNOP]2-', 87.003),
-        ('[CHNOP[13C]]_2-', '[C[13C]HNOP]2-', 87.003),
-        ('CHNOP[13C]-2', '[C[13C]HNOP]2-', 87.003),
-        ('Co(Bpy)(CO)4', '', 327.16),
-        ('CH3CH2Cl', 'C2H5Cl', 64.5147),
-        ('C1000H1000', 'CH', 13018.68),
-        ('Ru2(CO)8', 'C4O4Ru', 426.2232),
-        ('RuClH(CO)(PPh3)3', 'C55H46ClOP3Ru', 952.41392),
-        ('PhSiMe3', 'C9H14Si', 150.29566),
-        ('Ph(CO)C(CH3)3', 'C11H14O', 162.23156),
-        ('HGlyGluTyrOH', 'C16H21N3O7', 367.35864),
-        ('HCysTyrIleGlnAsnCysProLeuNH2', 'C41H65N11O11S2', 952.1519),
-        ('CGCGAATTCGCG', 'C116H148N46O73P12', 3726.4),
-        ('MDRGEQGLLK', 'C47H83N15O16S', 1146.3),
-        ('CDCl3', 'C[2H]Cl3', 120.384),
-        ('[13C]Cl4', '[13C]Cl4', 154.8153),
-        ('C5(PhBu(EtCHBr)2)3', 'C53H78Br6', 1194.626),
-        ('AgCuRu4(H)2[CO]12{PPh3}2', 'C48H32AgCuO12P2Ru4', 1438.4022),
-        ('PhNH2.HCl', 'C6H8ClN', 129.5892),
-        ('NH3.BF3', 'BF3H3N', 84.8357),
-        ('CuSO4.5H2O', 'CuH10O9S', 249.68),
-        ('5*H2O+CuSO4', 'CuH10O9S', 249.68),
-        ('5*H2O', 'H2O', 90.076435),
-        (
-            'HCysp(Trt)Tyrp(Tbu)IleGlnp(Trt)Asnp(Trt)ProLeuGlyNH2',
-            'C101H113N11O11S',
-            1689.13532,
-        ),
-    ]:
-        if verbose:
-            print(f'Trying Formula({formula!r}) ...', end='')
-        try:
-            f = Formula(formula)
-            f.empirical
-            f.mass
-            f.spectrum()
-        except FormulaError as exc:
-            print('Error:', exc)
-            continue
-        if empirical and f.empirical != empirical:
-            print(
-                f'Failure for {formula!r}:\n    Expected {empirical!r}, '
-                f'got {f.empirical!r}:'
-            )
-            continue
-        if mass and abs(f.mass - mass) > 0.1:
-            print(
-                f'Failure for {formula!r}:\n    Expected {mass}, got {f.mass}'
-            )
-            continue
-        if verbose:
-            print('ok')
-
-    # these formulas are expected to fail
-    for formula in [
-        '',
-        '()',
-        '2',
-        'a',
-        '(a)',
-        'C:H',
-        'H:',
-        'C[H',
-        'H)2',
-        'A',
-        'Aa',
-        '2lC',
-        '1C',
-        '[11C]',
-        'H0',
-        '()0',
-        '(H)0C',
-        'Ox: 0.26, 30Si: 0.74',
-        'H^++',
-        '[CHNOP[13C]]__2-',
-        'O2_-2',
-        'C+a',
-    ]:
-        if verbose:
-            print(f'Trying Formula({formula!r}) ...', end='')
-        try:
-            empirical = Formula(formula).empirical
-        except FormulaError as exc:
-            if verbose:
-                print('ok\nExpected error:', exc)
-        else:
-            print(
-                f'Failure expected for {formula!r}, got '
-                f'{Formula(formula).formula!r}'
-            )
-
-    from molmass import PROTON
-
-    assert abs(Formula('[1H]+').mass - PROTON.mass) < 1e-7
-
-
 def main(argv: list[str] | None = None, /) -> int:
     """Command line usage main function.
 
@@ -2436,7 +2304,7 @@ def main(argv: list[str] | None = None, /) -> int:
 
     """
     if argv is None:
-        argv = sys.argv
+        argv = sys.argv[1:]
 
     import optparse
 
@@ -2475,16 +2343,9 @@ def main(argv: list[str] | None = None, /) -> int:
         default=False,
         help='do not open web browser',
     )
-    opt(
-        '--test',
-        dest='test',
-        action='store_true',
-        default=False,
-        help='test the module',
-    )
     opt('-v', '--verbose', dest='verbose', action='store_true', default=False)
 
-    settings, formula_list = parser.parse_args()
+    settings, formula_list = parser.parse_args(argv)
 
     if settings.web:
         try:
@@ -2500,9 +2361,6 @@ def main(argv: list[str] | None = None, /) -> int:
         return web_main(
             url=settings.url, open_browser=not settings.nobrowser, form=form
         )
-    if settings.test:
-        test(settings.verbose)
-        return 0
     if formula_list:
         formula = ''.join(formula_list)
     else:
