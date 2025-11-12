@@ -78,6 +78,8 @@ except ImportError:
 
     import molmass  # type: ignore[no-redef]
 
+DEBUG = False
+
 PAGE = """<!DOCTYPE html PUBLIC
 "-//W3C//DTD XHTML 1.1 plus MathML 2.0 plus SVG 1.1//EN"
 "http://www.w3.org/2002/04/xhtml-math-svg/xhtml-math-svg.dtd">
@@ -391,6 +393,8 @@ def analyze(
             result.append('</table>')
 
     except Exception as exc:
+        if DEBUG:
+            raise
         msg = str(exc).splitlines()
         text = msg[0][0].upper() + msg[0][1:]
         details = '\n'.join(msg[1:])
@@ -549,7 +553,7 @@ def main(
     form: dict[str, str] | None = None,
     url: str | None = None,
     open_browser: bool = True,
-    debug: bool = False,
+    debug: bool = DEBUG,
 ) -> int:
     """Run web application in local Flask or fallback CGI server.
 
