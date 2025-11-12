@@ -17,7 +17,7 @@ of the chemical elements.
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD-3-Clause
-:Version: 2025.9.4
+:Version: 2025.11.11
 :DOI: `10.5281/zenodo.7135495 <https://doi.org/10.5281/zenodo.7135495>`_
 
 Quickstart
@@ -49,13 +49,19 @@ Requirements
 This revision was tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython <https://www.python.org>`_ 3.11.9, 3.12.10, 3.13.7, 3.14.0rc
+- `CPython <https://www.python.org>`_ 3.11.9, 3.12.10, 3.13.9, 3.14.0
 - `Flask <https://pypi.org/project/Flask/>`_ 3.1.2 (optional)
-- `Pandas <https://pypi.org/project/pandas/>`_ 2.3.2 (optional)
-- `wxPython <https://pypi.org/project/wxPython/>`_ 4.2.3 (optional)
+- `Pandas <https://pypi.org/project/pandas/>`_ 2.3.3 (optional)
+- `wxPython <https://pypi.org/project/wxPython/>`_ 4.2.4 (optional)
 
 Revisions
 ---------
+
+2025.11.11
+
+- Allow empty formulas (breaking).
+- Derive FormulaError from ValueError.
+- Move tests to separate test module.
 
 2025.9.4
 
@@ -239,5 +245,4 @@ Access physicochemical and descriptive properties of the chemical elements:
     14693.181589001...
     >>> for e in ELEMENTS:
     ...     e.validate()
-    ...     e = eval(repr(e))
     ...
