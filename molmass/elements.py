@@ -2290,7 +2290,7 @@ def sqlite_script() -> str:
 def word_wrap(
     text: str, linelen: int = 79, indent: int = 0, joinstr: str = '\n'
 ) -> str:
-    """Return string, word wrapped at linelen."""
+    """Return string, word-wrapped at linelen."""
     if len(text) < linelen:
         return text
     result: list[str] = []
