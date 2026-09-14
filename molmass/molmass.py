@@ -754,17 +754,17 @@ class Formula:
     def mz(self) -> float:
         """Mass-to-charge ratio.
 
-        Using the average relative molecular mass.
+        Using the monoisotopic mass.
 
         >>> Formula('H').mz
-        1.007941
+        1.007825
         >>> Formula('H+').mz
-        1.007392...
+        1.007276...
         >>> Formula('SO4_2-').mz
-        48.03175...
+        47.976413...
 
         """
-        return mass_charge_ratio(self.mass, self._charge)
+        return mass_charge_ratio(self.monoisotopic_mass, self._charge)
 
     @cached_property
     def isotope(self) -> Isotope:
@@ -1619,7 +1619,7 @@ class Spectrum:
         if not self._spectrum:
             return ''
         a = len(str(self.range[-1]))
-        show_mz = abs(self._charge) > 1
+        show_mz = abs(self._charge) > 0
         mz_header = '  m/z' if show_mz else ''
         result = [
             f'A{" " * a} Relative mass  Fraction %  Intensity %{mz_header}'
