@@ -299,6 +299,9 @@ def test_formulas_mass(formula, empirical, mass):
         'Ox: 0.26, 30Si: 0.74',
         'H^++',
         '[CHNOP[13C]]__2-',
+        '[Na+]',
+        '[Fe+2]',
+        '[SO4-2]',
         'O2_-2',
         'C+a',
     ],
@@ -325,6 +328,11 @@ def test_formula_groups(key, value):
         ('[11C]', 'unknown isotope', '[11C]\n.^'),
         ('O: 0;26, 30Si: 0.74', 'invalid list of mass fractions', ''),
         ('H^++', 'unexpected character', 'H^\n.^'),
+        (
+            '[Na+]',
+            'charge must follow the formula',
+            '[Na+]\n',
+        ),
     ],
 )
 def test_formula_error(formula, message, detail):

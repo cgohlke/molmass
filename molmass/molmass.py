@@ -1803,6 +1803,15 @@ def from_string(
     # replace Deuterium
     formula = _DEUTERIUM_PATTERN.sub('[2H]', formula)
 
+    # A charge belongs after the complete formula (for example ``[Na]+``),
+    # not inside an element/group bracket (``[Na+]``).  Treating the latter
+    # as a group silently changes the chemical meaning: ``[Na+]`` used to be
+    # accepted as neutral Na and ``[Fe+2]`` as neutral Fe2.
+    m = re.search(r'\[[^\[\]]*[+-][^\[\]]*\]', formula)
+    if m:
+        msg = 'charge must follow the formula, not occur inside brackets'
+        raise FormulaError(msg, formula, m.start() + 1)
+
     # charge
     formula, charge = split_charge(formula)
 
