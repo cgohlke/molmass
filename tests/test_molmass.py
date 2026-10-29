@@ -1145,6 +1145,12 @@ def test_from_fractions_edge_cases():
     ):
         from_fractions({'H': -0.5, 'O': 0.5})
 
+    # Individual mass fractions must not be negative even when the total is positive.
+    with pytest.raises(
+        FormulaError, match='fractions must be finite and non-negative'
+    ):
+        from_fractions({'O': -0.2, '30Si': 1.2})
+
     # empty dict returns empty string (existing behavior)
     assert from_fractions({}) == ''
 

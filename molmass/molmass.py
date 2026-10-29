@@ -1926,6 +1926,10 @@ def from_fractions(
     if sumfractions <= 0.0:
         msg = 'sum of fractions must be positive'
         raise FormulaError(msg)
+    if any(not math.isfinite(fraction) or fraction < 0.0
+           for fraction in fractions.values()):
+        msg = 'fractions must be finite and non-negative'
+        raise FormulaError(msg)
     for items in fractions.items():
         symbol, fraction = items
         if symbol == 'D':  # Deuterium
