@@ -1,5 +1,29 @@
+..
+  This file is updated by setup.py. Do not edit.
+
 Revisions
----------
+=========
+
+2026.10.31
+
+- Update atomic weights and isotopic compositions (CIAAW 2024, AME2020).
+- Update Dalton and particle masses to CODATA 2022.
+- Reject charges inside brackets, for example [Na+] (#20, breaking).
+- Reject negative and non-finite mass fractions (#22, breaking).
+- Reject more invalid formulas and arguments (breaking).
+- Make Element hashable and compare by identity (breaking).
+- Compare Formula by Hill notation and support sum (breaking).
+- Use abundance 1 for specified isotopes in Formula.isotope (breaking).
+- Fix and improve from_fractions (breaking).
+- Fix several formula parsing bugs.
+- Fix Formula.isotope, arithmetic, spectrum, and concentration validation.
+- Fix isotope, eleconfig, and ionenergy tables in elements.sqlite_script.
+- Add density_unit argument to ppm conversion methods.
+- Add Element.mass_uncertainty property.
+- Fix and improve web and elements_gui applications.
+- Improve docstrings and examples.
+- Replace optparse with argparse.
+- Run web application in http.server instead of Flask or CGI.
 
 2026.8.15
 
