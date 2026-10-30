@@ -44,7 +44,7 @@ of the chemical elements.
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD-3-Clause
-:Version: 2026.8.15
+:Version: 2026.10.31
 :DOI: `10.5281/zenodo.7135495 <https://doi.org/10.5281/zenodo.7135495>`_
 
 Quickstart
@@ -55,6 +55,9 @@ Install the molmass package and all dependencies from the
 
     python -m pip install -U "molmass[all]"
 
+See `Examples`_ and `Documentation <https://www.cgohlke.com/docs/molmass/>`_
+for using the programming interface.
+
 Print the console script usage::
 
     python -m molmass --help
@@ -63,9 +66,7 @@ Run the web application::
 
     python -m molmass --web
 
-The molmass library is documented via docstrings.
-
-See `Examples`_ for using the programming interface.
+Try the `Molecular Mass Calculator <https://www.cgohlke.com/molmass/>`_ online.
 
 Source code and support are available on
 `GitHub <https://github.com/cgohlke/molmass>`_.
@@ -76,13 +77,33 @@ Requirements
 This revision was tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython <https://www.python.org>`_ 3.12.10, 3.13.15, 3.14.7, 3.15.0rc
-- `Flask <https://pypi.org/project/Flask/>`_ 3.1.3 (optional)
-- `Pandas <https://pypi.org/project/pandas/>`_ 3.0.5 (optional)
-- `wxPython <https://pypi.org/project/wxPython/>`_ 4.3.1 (optional)
+- `CPython <https://www.python.org>`_ 3.12.10, 3.13.16, 3.14.10, 3.15.2
+- `Pandas <https://pypi.org/project/pandas/>`_ 3.1.0 (optional)
+- `wxPython <https://pypi.org/project/wxPython/>`_ 4.3.2 (optional)
 
 Revisions
 ---------
+
+2026.10.31
+
+- Update atomic weights and isotopic compositions (CIAAW 2024, AME2020).
+- Update Dalton and particle masses to CODATA 2022.
+- Reject charges inside brackets, for example [Na+] (#20, breaking).
+- Reject negative and non-finite mass fractions (#22, breaking).
+- Reject more invalid formulas and arguments (breaking).
+- Make Element hashable and compare by identity (breaking).
+- Compare Formula by Hill notation and support sum (breaking).
+- Use abundance 1 for specified isotopes in Formula.isotope (breaking).
+- Fix and improve from_fractions (breaking).
+- Fix several formula parsing bugs.
+- Fix Formula.isotope, arithmetic, spectrum, and concentration validation.
+- Fix isotope, eleconfig, and ionenergy tables in elements.sqlite_script.
+- Add density_unit argument to ppm conversion methods.
+- Add Element.mass_uncertainty property.
+- Fix and improve web and elements_gui applications.
+- Improve docstrings and examples.
+- Replace optparse with argparse.
+- Run web application in http.server instead of Flask or CGI.
 
 2026.8.15
 
@@ -95,31 +116,6 @@ Revisions
 - Drop support for Python 3.11, support Python 3.15.
 
 2026.1.8
-
-- Improve code quality.
-
-2025.12.12
-
-- Make boolean arguments keyword-only (breaking).
-
-2025.11.11
-
-- Allow empty formulas (breaking).
-- Derive FormulaError from ValueError.
-- Move tests to separate test module.
-
-2025.9.4
-
-- Precompile regex patterns.
-- Remove doctest command line option.
-- Drop support for Python 3.10, support Python 3.14.
-
-2025.4.14
-
-- Add mass_charge_ratio helper function (#17).
-- Drop support for Python 3.9.
-
-2024.10.25
 
 - …
 
@@ -172,7 +168,8 @@ Access physicochemical and descriptive properties of the chemical elements:
 Element(
     6, 'C', 'Carbon',
     group=14, period=2, block='p', series=1,
-    mass=12.01074, eleneg=2.55, eleaffin=1.262118,
+    mass=12.01074, mass_uncertainty=0.001,
+    eleneg=2.55, eleaffin=1.262118,
     covrad=0.77, atmrad=0.91, vdwrad=1.7,
     tboil=5100.0, tmelt=3825.0, density=3.51,
     eleconfig='[He] 2s2 2p2',
@@ -183,7 +180,7 @@ Element(
     ),
     isotopes={
         12: Isotope(12.0, 0.9893, 12),
-        13: Isotope(13.00335483507, 0.0107, 13),
+        13: Isotope(13.00335483534, 0.0107, 13),
     },
 )
 >>> e.number
@@ -202,17 +199,12 @@ Element(
 'Carbon'
 >>> len(ELEMENTS)
 109
->>> sum(e.mass for e in ELEMENTS)
-14693.181589001...
->>> for e in ELEMENTS:
-...     e.validate()
-...
 
 """
 
 from __future__ import annotations
 
-__version__ = '2026.8.15'
+__version__ = '2026.10.31'
 
 __all__ = [
     'AMINOACIDS',
@@ -222,10 +214,13 @@ __all__ = [
     'PREPROCESSORS',
     'Composition',
     'CompositionItem',
+    'DensityUnit',
     'Formula',
     'FormulaError',
+    'MassUnit',
     'Spectrum',
     'SpectrumEntry',
+    'VolumeUnit',
     '__version__',
     'analyze',
     'dilution',
@@ -249,36 +244,12 @@ import re
 import sys
 from dataclasses import dataclass
 from functools import cached_property, reduce
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Iterator, Sequence
-    from typing import Literal
 
     import pandas
-
-    MassUnit = Literal[
-        'g',
-        'mg',
-        'μg',
-        'ug',
-        'ng',
-        'kg',
-        'Da',
-        'kDa',
-        'MDa',
-    ]
-    VolumeUnit = Literal[
-        'L',
-        'mL',
-        'μL',
-        'uL',
-        'nL',
-        'dL',
-        'm3',
-        'cm3',
-        'dm3',
-    ]
 
 try:
     from .elements import ELECTRON, ELEMENTS, Isotope
@@ -297,10 +268,14 @@ def analyze(
     """Return analysis of chemical formula as string.
 
     Parameters:
-        formula: Chemical formula.
-        maxatoms: Number of atoms below which to calculate spectrum.
-        min_intensity: Minimum intensity percentage to include in spectrum.
-        debug: Raise exceptions instead of printing error message.
+        formula:
+            Chemical formula.
+        maxatoms:
+            Number of atoms below which to calculate spectrum.
+        min_intensity:
+            Minimum intensity percentage to include in spectrum.
+        debug:
+            Raise exceptions instead of printing error message.
 
     Examples:
         >>> print(analyze('C8H10N4O2', min_intensity=0.01))
@@ -389,8 +364,9 @@ class Formula:
         formula:
             Chemical formula. May contain only symbols of chemical elements,
             groups, isotopes, parentheses, numbers, and trailing charge.
-            The formula is not validated until it is parsed on demand
-            during instance attribute access or method calls.
+            Some errors are raised during initialization, others only
+            when the formula is parsed on demand during instance attribute
+            access or method calls.
         groups:
             Mapping of chemical group name to formula in Hill notation.
             The default is :py:attr:`GROUPS`.
@@ -492,6 +468,9 @@ class Formula:
             parse_arithmetic=parse_arithmetic,
         )
         self._formula_nocharge, self._charge = split_charge(self._formula)
+        if not self._formula_nocharge and self._charge != 0:
+            msg = 'charge without formula'
+            raise FormulaError(msg, formula, 0)
         if not allow_empty and not self._formula_nocharge:
             msg = 'empty formula'
             raise FormulaError(msg, formula, 0)
@@ -531,6 +510,7 @@ class Formula:
         num = 0  # number
         level = 0  # parenthesis level
         counts = [1]  # parenthesis level multiplication
+        closing: list[str] = []  # stack of closing parentheses
         i = len(formula)
         while i:
             i -= 1
@@ -543,6 +523,9 @@ class Formula:
                 if level < 0 or num != 0:
                     msg = "missing closing parenthesis ')]}>'"
                     raise FormulaError(msg, formula, i)
+                if closing.pop() != ')]}>'['([{<'.index(char)]:
+                    msg = 'mismatched parentheses'
+                    raise FormulaError(msg, formula, i)
             elif char in ')]}>':
                 if num == 0:
                     num = 1
@@ -551,6 +534,7 @@ class Formula:
                     counts.append(0)
                 counts[level] = num * counts[level - 1]
                 num = 0
+                closing.append(char)
             elif char.isdigit():
                 j = i
                 while i and formula[i - 1].isdigit():
@@ -679,8 +663,6 @@ class Formula:
     def gcd(self) -> int:
         """Greatest common divisor of element counts.
 
-        >>> Formula('H2').gcd
-        2
         >>> Formula('H2O').gcd
         1
         >>> Formula('C6H12O6').gcd
@@ -713,8 +695,6 @@ class Formula:
         12.0
         >>> Formula('C8H10N4O2').mass
         194.1909...
-        >>> Formula('C48H32AgCuO12P2Ru4').mass
-        1438.404...
 
         """
         result = 0.0
@@ -758,22 +738,22 @@ class Formula:
 
         >>> Formula('H').mz
         1.007941
-        >>> Formula('H+').mz
-        1.007392...
         >>> Formula('SO4_2-').mz
         48.03175...
 
         """
         return mass_charge_ratio(self.mass, self._charge)
 
-    @cached_property
+    @property
     def isotope(self) -> Isotope:
         """Isotope composed of most abundant elemental isotopes.
 
+        Specified isotopes are considered pure, with an abundance of 1.
+
         >>> Formula('C').isotope.mass
         12.0
-        >>> Formula('13C').isotope.massnumber
-        13
+        >>> Formula('13C').isotope
+        Isotope(mass=13.0033..., abundance=1.0, massnumber=13...)
         >>> Formula('C48H32AgCuO12P2Ru4').isotope
         Isotope(mass=1439.588..., abundance=0.00205..., massnumber=1440...)
 
@@ -786,9 +766,9 @@ class Formula:
                     isotope = ele.isotopes[massnumber]
                 else:
                     isotope = ele.isotopes[ele.nominalmass]
+                    result.abundance *= isotope.abundance**count
                 result.mass += isotope.mass * count
                 result.massnumber += isotope.massnumber * count
-                result.abundance *= isotope.abundance**count
         return result
 
     def composition(self, *, isotopic: bool = True) -> Composition:
@@ -860,6 +840,7 @@ class Formula:
                 Minimum fraction for pruning intermediate paths.
                 Prune low-probability paths during combinatorial isotope
                 expansion; does not filter final spectrum entries.
+                Must be in range [0, 1].
             min_intensity:
                 Minimum intensity percentage for final entries.
                 Remove entries below this threshold, relative to the most
@@ -880,33 +861,6 @@ class Formula:
             1      1.0078250   99.988500   100.000000
             2      2.0141018    0.011500     0.011501
 
-            >>> print(Formula('H+').spectrum())
-            A  Relative mass  Fraction %  Intensity %
-            1      1.0072765   99.988500   100.000000
-            2      2.0135532    0.011500     0.011501
-
-            >>> print(Formula('D2').spectrum())
-            A  Relative mass  Fraction %  Intensity %
-            4      4.0282036  100.000000   100.000000
-
-            >>> print(Formula('DH').spectrum())
-            A  Relative mass  Fraction %  Intensity %
-            3      3.0219268   99.988500   100.000000
-            4      4.0282036    0.011500     0.011501
-
-            >>> print(Formula('H2').spectrum())
-            A  Relative mass  Fraction %  Intensity %
-            2      2.0156501   99.977001   100.000000
-            3      3.0219268    0.022997     0.023003
-            4      4.0282036    0.000001     0.000001
-
-            >>> print(Formula('DHO').spectrum())
-            A   Relative mass  Fraction %  Intensity %
-            19      19.016841   99.745528   100.000000
-            20      20.021536    0.049468     0.049594
-            21      21.021087    0.204981     0.205504
-            22      22.027363    0.000024     0.000024
-
             >>> print(Formula('SO4_2-').spectrum(min_intensity=0.1))
             A   Relative mass  Fraction %  Intensity %  m/z
             96      95.952827   94.070057   100.000000  47.976413
@@ -914,7 +868,10 @@ class Formula:
             98      97.949936    4.983307     5.297443  48.974968
 
         """
-        spectrum: dict[int, list[float]] = {0: [0.0, 1.0, 0.0]}
+        if not 0.0 <= min_fraction <= 1.0:
+            msg = f'min_fraction must be in range [0, 1], not {min_fraction}'
+            raise ValueError(msg)
+        spectrum: dict[int, list[float]] = {0: [0.0, 1.0]}
         elements: dict[str, dict[int, int]] = self._elements
 
         if not elements:
@@ -961,7 +918,7 @@ class Formula:
                                     spectrum[k] = [m, f]
 
         # filter low intensities
-        if min_intensity is not None:
+        if min_intensity is not None and spectrum:
             norm = 100 / max(v[1] for v in spectrum.values())
             for massnumber, value in spectrum.copy().items():
                 if value[1] * norm < min_intensity:
@@ -982,12 +939,13 @@ class Formula:
         Formula('[(HO)2]2-')
 
         """
-        if (
-            not isinstance(number, int)  # type: ignore[redundant-expr]
-            or number < 1
-        ):
+        if isinstance(number, bool) or not isinstance(number, int):
+            return NotImplemented
+        if number < 1:
             msg = 'can only multiply with positive integer'
-            raise TypeError(msg)
+            raise ValueError(msg)
+        if not self._formula_nocharge:
+            return Formula()
         return Formula(
             join_charge(
                 f'({self._formula_nocharge}){number}', self._charge * number
@@ -1011,14 +969,24 @@ class Formula:
 
         """
         if not isinstance(other, Formula):
-            msg = 'can only add Formula instance'  # type: ignore[unreachable]
-            raise TypeError(msg)
-        return Formula(
-            join_charge(
-                f'({self._formula_nocharge})({other._formula_nocharge})',
-                self._charge + other.charge,
-            )
+            return NotImplemented
+        formula = ''.join(
+            f'({f})'
+            for f in (self._formula_nocharge, other._formula_nocharge)
+            if f
         )
+        return Formula(join_charge(formula, self._charge + other.charge))
+
+    def __radd__(self, other: int, /) -> Formula:
+        """Return formula for ``0 + formula``, enabling use with ``sum()``.
+
+        >>> sum([Formula('H2O'), Formula('HO-')])
+        Formula('[(H2O)(HO)]-')
+
+        """
+        if isinstance(other, bool) or other != 0:
+            return NotImplemented
+        return self
 
     def __sub__(self, other: Formula, /) -> Formula:
         """Subtract elements of other formula.
@@ -1028,24 +996,21 @@ class Formula:
 
         """
         if not isinstance(other, Formula):
-            msg = (  # type: ignore[unreachable]
-                'can only subtract Formula instance'
-            )
-            raise TypeError(msg)
+            return NotImplemented
         _elements = copy.deepcopy(self._elements)
         for symbol, isotopes in other._elements.items():
             if symbol not in _elements:
-                msg = f'element {symbol} not in {self}'
-                raise ValueError(msg)
+                msg = f'element {symbol} not in {self.formula}'
+                raise FormulaError(msg)
             element = _elements[symbol]
             for massnumber, count in isotopes.items():
                 if massnumber not in element:
-                    msg = f'element {massnumber}{symbol} not in {self}'
-                    raise ValueError(msg)
+                    msg = f'element {massnumber}{symbol} not in {self.formula}'
+                    raise FormulaError(msg)
                 element[massnumber] -= count
                 if element[massnumber] < 0:
                     msg = f'negative number of element {massnumber}{symbol}'
-                    raise ValueError(msg)
+                    raise FormulaError(msg)
                 if element[massnumber] == 0:
                     del element[massnumber]
                 if not element:
@@ -1071,19 +1036,19 @@ class Formula:
             Number of moles.
 
         Examples:
-            >>> f = Formula('H2O')
-            >>> f.moles(f.mass)
-            1.0
-            >>> f.moles(f.mass, 'mg')
-            0.001
+            >>> f = Formula('NaCl')
+            >>> f.moles(5.844)
+            0.09999...
+            >>> f.moles(500, 'mg')
+            0.008555...
             >>> f.moles(1.0, 'Da')
-            9.217...e-26
+            2.841...e-26
 
         """
         if self.mass == 0.0:
             msg = 'cannot calculate moles for formula with zero mass'
             raise ValueError(msg)
-        return float(mass) * MASS_UNIT[unit] / self.mass
+        return float(mass) * unit_factor(MASS_UNIT, unit) / self.mass
 
     def mass_from_moles(self, moles: float, /, unit: MassUnit = 'g') -> float:
         """Return mass from number of moles.
@@ -1102,19 +1067,19 @@ class Formula:
             Mass in specified unit.
 
         Examples:
-            >>> f = Formula('H2O')
-            >>> f.mass_from_moles(1.0)
-            18.015287
-            >>> f.mass_from_moles(1.0, 'mg')
-            18015.287
+            >>> f = Formula('NaCl')
+            >>> f.mass_from_moles(0.1)
+            5.8442...
+            >>> f.mass_from_moles(0.1, 'mg')
+            5844.26...
             >>> f.mass_from_moles(1.0, 'Da')
-            1.0849...e+25
+            3.519...e+25
 
         """
         if self.mass == 0.0:
             msg = 'cannot calculate mass for formula with zero mass'
             raise ValueError(msg)
-        return (float(moles) * self.mass) / MASS_UNIT[unit]
+        return (float(moles) * self.mass) / unit_factor(MASS_UNIT, unit)
 
     def molarity(
         self,
@@ -1145,21 +1110,21 @@ class Formula:
             Molarity in mol/L.
 
         Examples:
-            >>> f = Formula('H2O')
-            >>> f.molarity(f.mass, 1.0)
-            1.0
-            >>> f.molarity(f.mass, 100, volume_unit='mL')
-            10.0
+            >>> f = Formula('NaCl')
+            >>> f.molarity(5.844, 0.1)
+            0.9999...
+            >>> f.molarity(292.2, 50, mass_unit='mg', volume_unit='mL')
+            0.09999...
 
         """
-        volume = float(volume) * VOLUME_UNIT[volume_unit]
-        if volume == 0.0:
-            msg = 'volume must be non-zero'
+        volume = float(volume) * unit_factor(VOLUME_UNIT, volume_unit)
+        if not volume > 0.0:
+            msg = 'volume must be positive'
             raise ValueError(msg)
         if self.mass == 0.0:
             msg = 'cannot calculate molarity for formula with zero mass'
             raise ValueError(msg)
-        mass = float(mass) * MASS_UNIT[mass_unit]
+        mass = float(mass) * unit_factor(MASS_UNIT, mass_unit)
         return mass / self.mass / volume
 
     def mass_for_molarity(
@@ -1191,83 +1156,130 @@ class Formula:
             Mass in specified unit.
 
         Examples:
-            >>> f = Formula('H2O')
-            >>> f.mass_for_molarity(1.0, 1.0)
-            18.0152...
-            >>> f.mass_for_molarity(0.5, 250, volume_unit='mL')
-            2.2519...
-            >>> f.mass_for_molarity(0.5, 250, volume_unit='mL', mass_unit='mg')
-            2251.9...
+            >>> f = Formula('NaCl')
+            >>> f.mass_for_molarity(0.15, 1.0)
+            8.7664...
+            >>> f.mass_for_molarity(0.15, 250, volume_unit='mL')
+            2.1916...
+            >>> f.mass_for_molarity(0.15, 0.25, mass_unit='mg')
+            2191.6...
 
         """
         if self.mass == 0.0:
             msg = 'cannot calculate mass for formula with zero mass'
             raise ValueError(msg)
-        volume = float(volume) * VOLUME_UNIT[volume_unit]
-        return (float(molarity) * volume * self.mass) / MASS_UNIT[mass_unit]
+        volume = float(volume) * unit_factor(VOLUME_UNIT, volume_unit)
+        if not volume >= 0.0:
+            msg = 'volume must not be negative'
+            raise ValueError(msg)
+        return (float(molarity) * volume * self.mass) / unit_factor(
+            MASS_UNIT, mass_unit
+        )
 
-    def ppm_to_molarity(self, ppm: float, /, density: float = 1.0) -> float:
+    def ppm_to_molarity(
+        self,
+        ppm: float,
+        /,
+        density: float = 1.0,
+        *,
+        density_unit: DensityUnit = 'g/mL',
+    ) -> float:
         """Return molarity from parts per million.
 
         Use to convert concentration in ppm (mg/kg) to molarity (mol/L).
 
         Parameters:
-            ppm: Concentration in ppm (mg/kg).
-            density: Solution density in g/mL (default 1.0 for water).
+            ppm:
+                Concentration in ppm (mg/kg).
+            density:
+                Solution density (default 1.0 g/mL for water).
+            density_unit:
+                Unit of density
+                {'g/mL', 'g/cm3', 'kg/L', 'kg/dm3', 'g/L', 'kg/m3', 'mg/mL'}.
 
         Returns:
             Molarity in mol/L.
 
         Examples:
-            >>> f = Formula('H2O')
-            >>> f.ppm_to_molarity(f.mass * 1000)
-            1.0
+            >>> f = Formula('NaCl')
             >>> f.ppm_to_molarity(1000)
-            0.0555...
+            0.01711...
+            >>> f.ppm_to_molarity(1000, 1.2)
+            0.02053...
+            >>> f.ppm_to_molarity(1000, 1200, density_unit='kg/m3')
+            0.02053...
 
         """
+        density = float(density) * unit_factor(DENSITY_UNIT, density_unit)
         # ppm = mg solute / kg solution
         # convert to g/L: ppm (mg/kg) * density (kg/L) / 1000 (mg/g) = g/L
         # then divide by molar mass to get mol/L
         if self.mass == 0.0:
             msg = 'cannot calculate molarity for formula with zero mass'
             raise ValueError(msg)
-        if density == 0.0:
-            msg = 'density must be non-zero'
+        if not density > 0.0:
+            msg = 'density must be positive'
             raise ValueError(msg)
         return ppm * density / self.mass / 1000.0
 
     def molarity_to_ppm(
-        self, molarity: float, /, density: float = 1.0
+        self,
+        molarity: float,
+        /,
+        density: float = 1.0,
+        *,
+        density_unit: DensityUnit = 'g/mL',
     ) -> float:
         """Return parts per million from molarity.
 
         Use to convert molarity (mol/L) to concentration in ppm (mg/kg).
 
         Parameters:
-            molarity: Concentration in mol/L.
-            density: Solution density in g/mL (default 1.0 for water).
+            molarity:
+                Concentration in mol/L.
+            density:
+                Solution density (default 1.0 g/mL for water).
+            density_unit:
+                Unit of density
+                {'g/mL', 'g/cm3', 'kg/L', 'kg/dm3', 'g/L', 'kg/m3', 'mg/mL'}.
 
         Returns:
             Concentration in ppm (mg/kg).
 
         Examples:
-            >>> f = Formula('H2O')
-            >>> f.molarity_to_ppm(1.0)
-            18015.287
-            >>> f.molarity_to_ppm(0.5)
-            9007.6435
+            >>> f = Formula('NaCl')
+            >>> f.molarity_to_ppm(0.1)
+            5844.26...
+            >>> f.molarity_to_ppm(0.1, 1.2)
+            4870.22...
+            >>> f.molarity_to_ppm(0.1, 1200, density_unit='g/L')
+            4870.22...
 
         """
+        density = float(density) * unit_factor(DENSITY_UNIT, density_unit)
         # molarity (mol/L) * molar mass (g/mol) = g/L
         # convert to ppm: g/L * 1000 (mg/g) / density (kg/L) = mg/kg
         if self.mass == 0.0:
             msg = 'cannot calculate ppm for formula with zero mass'
             raise ValueError(msg)
-        if density == 0.0:
-            msg = 'density must be non-zero'
+        if not density > 0.0:
+            msg = 'density must be positive'
             raise ValueError(msg)
         return self.mass * molarity * 1000.0 / density
+
+    def __eq__(self, other: object, /) -> bool:
+        """Return whether formulas have same Hill notation.
+
+        >>> Formula('HOH') == Formula('H2O')
+        True
+
+        """
+        if not isinstance(other, Formula):
+            return NotImplemented
+        return self.formula == other.formula
+
+    def __hash__(self) -> int:
+        return hash(self.formula)
 
     def __str__(self) -> str:
         return self._formula
@@ -1308,15 +1320,13 @@ class Composition:
             Symbols must not be repeated.
 
     Examples:
-        >>> c = Composition((('2H', 2, 4.028, 0.201), ('O', 1, 15.999, 0.799)))
-        >>> c
-        <Composition([('2H', 2, 4.028, 0.201), ...])>
+        >>> c = Formula('D2O').composition()
         >>> print(c)
         Element  Count  Relative mass  Fraction %
-        2H           2       4.028000     20.1000
-        O            1      15.999000     79.9000
+        2H           2       4.028204     20.1133
+        O            1      15.999405     79.8867
         >>> c['O']
-        CompositionItem(symbol='O', count=1, mass=15.999, fraction=0.799)
+        CompositionItem(symbol='O', count=1, mass=15.999405, fraction=0.79...)
 
     """
 
@@ -1332,7 +1342,7 @@ class Composition:
         """Sums of counts (excluding electrons), masses, and fractions.
 
         >>> Formula('2HO').composition().total
-        CompositionItem(symbol='Total', count=2, mass=18.0135..., fraction=1.0)
+        CompositionItem(symbol='Total', count=2, mass=18.0135..., fraction=...)
 
         """
         result = CompositionItem('Total', 0, 0.0, 0.0)
@@ -1460,19 +1470,19 @@ class Spectrum:
     The basic interface is a sorted ``dict[massnumber, SpectrumEntry]``.
 
     Parameters:
-        spectrum: Mapping of mass number to relative mass and fraction.
-        charge: Charge number.
+        spectrum:
+            Mapping of mass number to relative mass and fraction.
+        charge:
+            Charge number.
 
     Examples:
-        >>> s = Spectrum({1: [1.078, 0.9999], 2: [2.014, 0.0001]})
-        >>> s
-        <Spectrum({1: [1, 1.078, 0.9999, 100.0, 1.078], ...})>
+        >>> s = Formula('DH').spectrum()
         >>> print(s)
         A  Relative mass  Fraction %  Intensity %
-        1      1.0780000   99.990000   100.000000
-        2      2.0140000    0.010000     0.010001
-        >>> s[2]
-        SpectrumEntry(massnumber=2, mass=2.014, fraction=0.0001, ..., mz=2.014)
+        3      3.0219268   99.988500   100.000000
+        4      4.0282036    0.011500     0.011501
+        >>> s[4]
+        SpectrumEntry(massnumber=4, mass=4.0282..., fraction=0.000115, ...)
 
     """
 
@@ -1570,8 +1580,8 @@ class Spectrum:
     def asdict(self) -> dict[int, tuple[float, float, float, float]]:
         """Return dict[massnumber, tuple[mass, fraction, intensity, mz]].
 
-        >>> Formula('DH').spectrum().asdict()
-        {3: (3.0..., 0.9..., 100.0, 3...), 4: (4.0..., 0.0..., 0.0..., 4...)}
+        >>> Formula('DH').spectrum().asdict()[4]
+        (4.0282..., 0.000115, 0.0115..., 4.0282...)
 
         """
         return {
@@ -1581,8 +1591,8 @@ class Spectrum:
     def astuple(self) -> tuple[tuple[int, float, float, float, float], ...]:
         """Return tuple[tuple[massnumber, mass, fraction, intensity, mz], ...].
 
-        >>> Formula('DH').spectrum().astuple()
-        ((3, 3.0..., 0.9..., 100.0, 3...), (4, 4.0..., 0.0..., 0.0..., 4...))
+        >>> Formula('DH').spectrum().astuple()[0]
+        (3, 3.0219..., 0.999885, 100.0, 3.0219...)
 
         """
         return tuple(value.astuple() for value in self._spectrum.values())
@@ -1641,9 +1651,12 @@ class FormulaError(ValueError):
     """Error in chemical formula.
 
     Parameters:
-        message: Error message.
-        formula: Chemical formula in which error occurred.
-        position: Position in formula where error occurred.
+        message:
+            Error message.
+        formula:
+            Chemical formula in which error occurred.
+        position:
+            Position in formula where error occurred.
 
     Examples:
         >>> Formula('abc').formula
@@ -1736,12 +1749,8 @@ def from_string(
         'Valohp'
         >>> from_string('HLeu2OH')
         'H(C6H11NO)2OH'
-        >>> from_string('D2O')
-        '[2H]2O'
         >>> from_string('O: 0.26, 30Si: 0.74')
         'O2[30Si]3'
-        >>> from_string('O: 0.26, 30Si: 0.74', parse_fractions=False)
-        'O:0(,30Si:0)26()74'
         >>> from_string('PhNH2.HCl')
         '(C6H5)NH2HCl'
         >>> from_string('PhNH2.HCl', parse_arithmetic=False)
@@ -1782,14 +1791,17 @@ def from_string(
         try:
             for item in formula.split(','):
                 items = item.split(':')
-                fractions[items[0].strip()] = float(items[1].strip())
+                key = items[0].strip()
+                value = float(items[1].strip())
+                fractions[key] = fractions.get(key, 0.0) + value
         except Exception as exc:
             msg = 'invalid list of mass fractions'
             raise FormulaError(msg, formula) from exc
         return from_fractions(fractions)
 
-    if parse_oligos and len(formula) > 1:
-        fset = set(formula)
+    sequence, _ = split_charge(formula)
+    if parse_oligos and len(sequence) > 1:
+        fset = set(sequence)
         if fset <= set('ATCG') and fset & set('ATG'):
             return from_oligo(formula, 'ssdna')
         if fset <= set('AUCG') and fset & set('AG'):
@@ -1803,6 +1815,19 @@ def from_string(
     # replace Deuterium
     formula = _DEUTERIUM_PATTERN.sub('[2H]', formula)
 
+    level = 0
+    for i, char in enumerate(formula):
+        if char in '([{<':
+            level += 1
+        elif char in ')]}>':
+            level -= 1
+        elif level > 0 and char in '+-':
+            msg = (
+                f'{char!r} inside brackets, '
+                'charge must follow complete formula, for example [Na]+'
+            )
+            raise FormulaError(msg, formula, i)
+
     # charge
     formula, charge = split_charge(formula)
 
@@ -1810,8 +1835,7 @@ def from_string(
         formula = formula.replace('.', '+')
         if '+' in formula or '*' in formula:
             # TODO: document O2+12C is C12O2, not [12C]O2
-            for match in _ARITHMETIC_PATTERN.findall(formula):
-                formula = formula.replace(match[0], f'({match[2]}){match[1]}')
+            formula = _ARITHMETIC_PATTERN.sub(r'+(\3)\2', formula)
             # invalid lower case after operator
             m = _ARITHMETIC_INVALID_PATTERN.search(formula)
             if m:
@@ -1890,13 +1914,31 @@ def from_fractions(
     *,
     maxcount: int = 10,
     precision: float = 1e-4,
+    tolerance: float | None = None,
 ) -> str:
-    """Return formula string from elemental mass fractions.
+    """Return empirical formula from elemental mass fractions.
+
+    The result is the simplest whole number ratio of atoms in Hill order.
 
     Parameters:
-        fractions: Mapping of element symbols to abundances.
-        maxcount: Maximum count of single element in formula.
-        precision: Threshold for finding smallest acceptable element count.
+        fractions:
+            Mapping of element or isotope symbols to relative mass fractions.
+            Fractions need not sum to 1. Fractions of symbols denoting the
+            same element or isotope, for example 'D' and '[2H]', are added.
+        maxcount:
+            Largest multiplier tried to turn atom ratios into integers.
+            Atom counts of individual elements may exceed `maxcount`.
+        precision:
+            Accept the smallest multiplier for which the summed deviation of
+            atom counts from integers is below
+            ``precision * number of symbols * multiplier``.
+        tolerance:
+            Maximum deviation of any atom count from an integer.
+            By default, return the best fit regardless of deviation.
+
+    Raises:
+        FormulaError:
+            Invalid symbol or fraction, or deviation exceeds `tolerance`.
 
     Examples:
         >>> from_fractions({'H': 0.112, 'O': 0.888})
@@ -1911,50 +1953,56 @@ def from_fractions(
     """
     if not fractions:
         return ''
-    # divide normalized fractions by element/isotope mass
-    numbers = {}
-    sumfractions = sum(fractions.values())
-    if sumfractions <= 0.0:
-        msg = 'sum of fractions must be positive'
-        raise FormulaError(msg)
-    for items in fractions.items():
-        symbol, fraction = items
-        if symbol == 'D':  # Deuterium
-            symbol = '2H'
-        if symbol[0].isupper():
-            try:
-                mass = ELEMENTS[symbol].mass
-            except KeyError:
-                msg = f'unknown element {symbol!r}'
-                raise FormulaError(msg) from None
+
+    # number of atoms relative to each other
+    numbers: dict[str, float] = {}
+    for symbol, value in fractions.items():
+        try:
+            fraction = float(value)
+        except (TypeError, ValueError):
+            msg = f'invalid fraction {value!r}'
+            raise FormulaError(msg) from None
+        if not (math.isfinite(fraction) and fraction > 0.0):
+            msg = 'fractions must be positive and finite'
+            raise FormulaError(msg)
+
+        bracketed = symbol.startswith('[')
+        if bracketed != symbol.endswith(']'):
+            msg = f'invalid symbol {symbol!r}'
+            raise FormulaError(msg)
+        name = symbol[1:-1] if bracketed else symbol
+        if name == 'D':  # Deuterium
+            name = '2H'
+        i = len(name) - len(name.lstrip('0123456789'))
+        element = name[i:]
+        # ELEMENTS also maps element names, which are not valid symbols
+        if element not in ELEMENTS or ELEMENTS[element].symbol != element:
+            if element[:1].isupper():
+                msg = f'unknown element {element!r}'
+            else:
+                msg = f'invalid symbol {symbol!r}'
+            raise FormulaError(msg)
+        ele = ELEMENTS[element]
+        if i:
+            massnum = int(name[:i])
+            if massnum not in ele.isotopes:
+                msg = f"unknown isotope '[{massnum}{element}]'"
+                raise FormulaError(msg)
+            key = f'[{massnum}{element}]'
+            mass = ele.isotopes[massnum].mass
         else:
-            if symbol.startswith('['):
-                symbol = symbol[1:-1]
-            if symbol == 'D':  # Deuterium inside brackets
-                symbol = '2H'
-            i = 0
-            while symbol[i].isdigit():
-                i += 1
-            massnum = int(symbol[:i])
-            symbol = symbol[i:]
-            try:
-                mass = ELEMENTS[symbol].isotopes[massnum].mass
-            except KeyError:
-                msg = f"unknown isotope '[{massnum}{symbol}]'"
-                raise FormulaError(msg) from None
-            symbol = f'[{massnum}{symbol}]'
-        numbers[symbol] = fraction / (sumfractions * mass)
+            key = element
+            mass = ele.mass
+        numbers[key] = numbers.get(key, 0.0) + fraction / mass
 
-    # divide numbers by smallest number
     smallest = min(numbers.values())
-    for symbol in numbers:
-        numbers[symbol] /= smallest
+    numbers = {key: value / smallest for key, value in numbers.items()}
 
-    # find smallest factor that turns all numbers into integers
+    # find smallest multiplier that turns all numbers into integers
     precision *= len(numbers)
-    best = 1e6
+    best = math.inf
     factor = 1
-    for i in range(1, maxcount):
+    for i in range(1, maxcount + 1):
         x = sum(abs((i * n) - round(i * n)) for n in numbers.values())
         if x < best:
             best = x
@@ -1962,14 +2010,19 @@ def from_fractions(
             if best < i * precision:
                 break
 
-    formula = []
-    for symbol, number in sorted(numbers.items()):
-        count = round(factor * number)
-        if count > 1:
-            formula.append(f'{symbol}{count}')
-        else:
-            formula.append(symbol)
-    return ''.join(formula)
+    counts = {key: math.floor(factor * n + 0.5) for key, n in numbers.items()}
+    if tolerance is not None:
+        deviation = max(
+            abs(factor * n - counts[key]) for key, n in numbers.items()
+        )
+        if deviation > tolerance:
+            msg = f'atom counts deviate from integers by {deviation:.3g}'
+            raise FormulaError(msg)
+
+    return ''.join(
+        key if counts[key] == 1 else f'{key}{counts[key]}'
+        for key in hill_sorted(counts)
+    )
 
 
 def from_sequence(sequence: str, groups: dict[str, str], /) -> str:
@@ -1984,15 +2037,16 @@ def from_sequence(sequence: str, groups: dict[str, str], /) -> str:
             :py:attr:`AMINOACIDS`.
 
     Examples:
-        >>> from_sequence('A', {'A': 'B'})
-        '(B)'
-        >>> from_sequence('AA', {'A': 'B'})
-        '(B)2'
+        >>> from_sequence('GAG', AMINOACIDS)
+        '(C3H5NO)(C2H3NO)2'
 
     """
     sequence, charge = split_charge(sequence)
     counts = dict.fromkeys(groups, 0)
-    for item in sequence:
+    for i, item in enumerate(sequence):
+        if item not in counts:
+            msg = f'unknown sequence item {item!r}'
+            raise FormulaError(msg, sequence, i)
         counts[item] += 1
     formula = []
     for key in sorted(groups):
@@ -2068,7 +2122,8 @@ def from_oligo(sequence: str, dtype: str = 'ssdna', /) -> str:
         complements = DEOXYNUCLEOTIDE_COMPLEMENTS
 
     if dtype.startswith('ds'):
-        t = ''.join(complements[i] for i in sequence)
+        # unknown items are passed through and rejected by from_sequence
+        t = ''.join(complements.get(i, i) for i in sequence)
         formula = from_sequence(sequence + t, items)
         formula = f'({formula}(H2O)2)'
     else:
@@ -2081,14 +2136,14 @@ def mass_charge_ratio(mass: float, charge: int, /) -> float:
     """Return mass-to-charge ratio.
 
     Parameters:
-        mass: Mass to divide by charge.
-        charge: Charge number in units of elementary charge.
+        mass:
+            Mass to divide by charge.
+        charge:
+            Charge number in units of elementary charge.
 
     Examples:
         >>> mass_charge_ratio(1.0, -2)
         0.5
-        >>> mass_charge_ratio(1.0, 1)
-        1.0
         >>> mass_charge_ratio(1.0, 0)
         1.0
         >>> f = Formula('SO4_2-')
@@ -2117,10 +2172,14 @@ def dilution(
     Must provide either final_molarity or final_volume.
 
     Parameters:
-        molarity: Initial concentration (M).
-        volume: Initial volume (any unit).
-        final_molarity: Final concentration.
-        final_volume: Final volume (same unit).
+        molarity:
+            Initial concentration (M).
+        volume:
+            Initial volume (any unit).
+        final_molarity:
+            Final concentration.
+        final_volume:
+            Final volume (same unit).
 
     Returns:
         Tuple of (final_molarity, final_volume).
@@ -2128,8 +2187,6 @@ def dilution(
     Examples:
         >>> dilution(1.0, 10, final_volume=100)
         (0.1, 100)
-        >>> dilution(1.0, 10, final_molarity=0.1)
-        (0.1, 100.0)
         >>> dilution(12.0, 10, final_molarity=1.0)
         (1.0, 120.0)
 
@@ -2187,13 +2244,9 @@ def gcd(numbers: Iterable[int], /) -> int:
         numbers: Integer numbers.
 
     Examples:
+        >>> gcd([4, 6])
+        2
         >>> gcd([])
-        1
-        >>> gcd([4])
-        4
-        >>> gcd([3, 6])
-        3
-        >>> gcd([6, 7])
         1
 
     """
@@ -2214,18 +2267,14 @@ def precision_digits(f: float, width: int, /) -> int:
     """Return number of digits after decimal point to print f in width chars.
 
     Parameters:
-        f: Floating point number to print in `width` characters.
-        width: Maximum length of printed number.
+        f:
+            Floating point number to print in `width` characters.
+        width:
+            Maximum length of printed number.
 
     Examples:
-        >>> precision_digits(0.0, 5)
-        3
-        >>> precision_digits(-0.12345678, 5)
-        2
         >>> precision_digits(1.23456789, 5)
         3
-        >>> precision_digits(12.3456789, 5)
-        2
         >>> precision_digits(12345.6789, 5)
         1
 
@@ -2255,30 +2304,14 @@ def split_charge(formula: str, /) -> tuple[str, int]:
         ('Formula', 0)
         >>> split_charge('Formula+')
         ('Formula', 1)
-        >>> split_charge('Formula+1')
-        ('Formula', 1)
         >>> split_charge('Formula++')
         ('Formula', 2)
         >>> split_charge('[Formula]2+')
         ('Formula', 2)
-        >>> split_charge('Formula+2')
-        ('Formula', 2)
-        >>> split_charge('[[Formula]]2-')
-        ('[Formula]', -2)
-        >>> split_charge('[Formula]-2')
-        ('Formula', -2)
-        >>> split_charge('[Formula]_2-')
-        ('Formula', -2)
         >>> split_charge('Formula_2-')
         ('Formula', -2)
         >>> split_charge('Formula-2')
         ('Formula', -2)
-        >>> split_charge('Formula_+')
-        ('Formula', 1)
-        >>> split_charge('Formula+-')
-        ('Formula', 0)
-        >>> split_charge('Formul+a+')
-        ('Formul+a', 1)
 
     """
     charge = 0
@@ -2312,13 +2345,23 @@ def split_charge(formula: str, /) -> tuple[str, int]:
         if m_delim == '_':
             formula = formula.rsplit('_', 1)[0]
         elif m_delim == '':
-            formula = formula.strip(m_sign)
+            formula = formula[: -len(m_sign)]
         elif m_delim == ']':
             formula = formula.rsplit(']', 1)[0] + ']'
         else:
             formula = formula.rsplit(m_delim, 1)[0]
         if formula.startswith('[') and formula.endswith(']'):
-            formula = formula[1:-1]
+            # only strip if first bracket closes at the end
+            level = 0
+            for i, char in enumerate(formula):
+                if char in '([{<':
+                    level += 1
+                elif char in ')]}>':
+                    level -= 1
+                    if level == 0 and i < len(formula) - 1:
+                        break
+            else:
+                formula = formula[1:-1]
     return formula, charge
 
 
@@ -2326,9 +2369,12 @@ def join_charge(formula: str, charge: int, separator: str = '', /) -> str:
     """Return formula with charge appended.
 
     Parameters:
-        formula: Chemical formula without charge.
-        charge: Charge number.
-        separator: Character separating formula from charge. One of '' or '_'.
+        formula:
+            Chemical formula without charge.
+        charge:
+            Charge number.
+        separator:
+            Character separating formula from charge. One of '' or '_'.
 
     Returns:
         Formula with charge != 0 appended.
@@ -2357,8 +2403,10 @@ def format_charge(charge: int, prefix: str = '', /) -> str:
     """Return string representation of charge.
 
     Parameters:
-        charge: Charge number.
-        prefix: Character placed in front of charge in case ``abs(charge)>1``.
+        charge:
+            Charge number.
+        prefix:
+            Character placed in front of charge in case ``abs(charge)>1``.
 
     Examples:
         >>> format_charge(-2, '_')
@@ -2376,20 +2424,66 @@ def format_charge(charge: int, prefix: str = '', /) -> str:
     return f'{prefix}{count}{sign}'
 
 
-MASS_UNIT: dict[str, float] = {
+def unit_factor[U: str](units: dict[U, float], unit: U, /) -> float:
+    """Return conversion factor of unit or raise ValueError."""
+    try:
+        return units[unit]
+    except KeyError:
+        msg = f'unknown unit {unit!r}, must be one of {tuple(units)}'
+        raise ValueError(msg) from None
+
+
+MassUnit = Literal[
+    'g',
+    'mg',
+    'μg',
+    'ug',
+    'ng',
+    'kg',
+    'Da',
+    'kDa',
+    'MDa',
+]
+"""Mass unit symbols."""
+
+VolumeUnit = Literal[
+    'L',
+    'mL',
+    'μL',
+    'uL',
+    'nL',
+    'dL',
+    'm3',
+    'cm3',
+    'dm3',
+]
+"""Volume unit symbols."""
+
+DensityUnit = Literal[
+    'g/mL',
+    'g/cm3',
+    'kg/L',
+    'kg/dm3',
+    'g/L',
+    'kg/m3',
+    'mg/mL',
+]
+"""Density unit symbols."""
+
+MASS_UNIT: dict[MassUnit, float] = {
     'g': 1.0,
     'mg': 1e-3,
     'μg': 1e-6,
     'ug': 1e-6,  # support 'ug' as alternative to 'μg'
     'ng': 1e-9,
     'kg': 1e3,
-    'Da': 1.66053906660e-24,  # atomic mass unit to grams
-    'kDa': 1.66053906660e-21,
-    'MDa': 1.66053906660e-18,
+    'Da': 1.66053906892e-24,  # atomic mass unit to grams, CODATA 2022
+    'kDa': 1.66053906892e-21,
+    'MDa': 1.66053906892e-18,
 }
 """Mapping of mass unit symbols to conversion factors to grams."""
 
-VOLUME_UNIT: dict[str, float] = {
+VOLUME_UNIT: dict[VolumeUnit, float] = {
     'L': 1.0,
     'mL': 1e-3,
     'μL': 1e-6,
@@ -2401,6 +2495,17 @@ VOLUME_UNIT: dict[str, float] = {
     'dm3': 1.0,
 }
 """Mapping of volume unit symbols to conversion factors to liters."""
+
+DENSITY_UNIT: dict[DensityUnit, float] = {
+    'g/mL': 1.0,
+    'g/cm3': 1.0,
+    'kg/L': 1.0,
+    'kg/dm3': 1.0,
+    'g/L': 1e-3,
+    'kg/m3': 1e-3,
+    'mg/mL': 1e-3,
+}
+"""Mapping of density unit symbols to conversion factors to g/mL."""
 
 # precompile regex patterns
 _DEUTERIUM_PATTERN = re.compile(r'(D)(?![a-z])')
@@ -2624,7 +2729,7 @@ def main(argv: list[str] | None = None, /) -> int:
     if argv is None:
         argv = sys.argv[1:]
 
-    import optparse
+    import argparse
 
     def search_doc(r: str, d: str) -> str:
         if not __doc__:
@@ -2634,13 +2739,17 @@ def main(argv: list[str] | None = None, /) -> int:
             return d
         return match.group(1)
 
-    parser = optparse.OptionParser(
-        usage='usage: %prog [options] formula',
+    parser = argparse.ArgumentParser(
+        usage='%(prog)s [options] formula',
         description=search_doc('\n\n([^|]*?)\n\n', ''),
-        version='%prog ' + search_doc(':Version: (.*)', 'Unknown'),
         prog='molmass',
     )
-    opt = parser.add_option
+    opt = parser.add_argument
+    opt(
+        '--version',
+        action='version',
+        version='%(prog)s ' + search_doc(':Version: (.*)', 'Unknown'),
+    )
     opt(
         '--web',
         dest='web',
@@ -2662,8 +2771,10 @@ def main(argv: list[str] | None = None, /) -> int:
         help='do not open web browser',
     )
     opt('-v', '--verbose', dest='verbose', action='store_true', default=False)
+    opt('formula', nargs='*', help=argparse.SUPPRESS)
 
-    settings, formula_list = parser.parse_args(argv)
+    settings = parser.parse_intermixed_args(argv)
+    formula_list = settings.formula
 
     if settings.web:
         try:
@@ -2680,11 +2791,7 @@ def main(argv: list[str] | None = None, /) -> int:
     else:
         parser.error('no formula specified')
 
-    try:
-        results = analyze(formula)
-    except Exception as exc:
-        print('\nError: \n  ', exc, sep='')  # noqa: T201
-        raise
+    results = analyze(formula)
     print('\n', results, sep='')  # noqa: T201
 
     return 0
