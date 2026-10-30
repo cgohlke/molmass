@@ -29,11 +29,19 @@
 
 """Unittests for the molmass package.
 
-:Version: 2026.8.15
+:Version: 2026.10.31
 
 """
 
 import contextlib
+import dataclasses
+import math
+import re
+import sqlite3
+import threading
+import typing
+import urllib.error
+import urllib.request
 
 import pytest
 
@@ -69,7 +77,9 @@ from molmass import (
     main,
     mass_charge_ratio,
     split_charge,
+    web,
 )
+from molmass.elements import Elements, sqlite_script
 from molmass.molmass import gcd, precision_digits
 
 
@@ -119,7 +129,6 @@ def test_empty():
     assert composition.astuple() == ()
     assert composition.asdict() == {}
     assert len(composition) == 0
-    assert composition.dataframe().empty
     assert str(composition) == ''
     assert repr(composition) == 'Composition([])'
 
@@ -127,7 +136,6 @@ def test_empty():
     assert len(spectrum) == 0
     assert spectrum.asdict() == {}
     assert spectrum.mean == 0.0
-    assert spectrum.dataframe().empty
     assert str(spectrum) == ''
     assert repr(spectrum) == 'Spectrum({})'
     with pytest.raises(ValueError):
@@ -146,10 +154,10 @@ def test_etoh():
     assert f.gcd == 1
     assert f.charge == 0
     assert f.mass == 46.068531
-    assert f.monoisotopic_mass == 46.041864812949996
+    assert f.monoisotopic_mass == 46.04186481066
     assert f.nominal_mass == 46
     assert f.mz == 46.068531
-    assert f.isotope.mass == 46.041864812949996
+    assert f.isotope.mass == 46.04186481066
     assert f.isotope.massnumber == 46
     assert f.isotope.abundance == 0.9756627354527866
 
@@ -164,7 +172,6 @@ def test_etoh():
         ('H', 6, 6.047646, 0.13127499116479316),
         ('O', 1, 15.999405, 0.34729574945639136),
     )
-    assert not composition.dataframe().empty
 
     spectrum = f.spectrum(min_fraction=1e-9, min_intensity=1e-9)
     assert isinstance(spectrum[46], SpectrumEntry)
@@ -174,47 +181,46 @@ def test_etoh():
     assert repr(spectrum).startswith('<Spectrum({46: [46, 46.041')
     assert len(spectrum) == 6
     assert spectrum.asdict() == {
-        46: (46.04186481295, 0.9756627354527866, 100.0, 46.04186481295),
+        46: (46.04186481066, 0.9756627354527866, 100.0, 46.04186481066),
         47: (
-            47.04532293299781,
+            47.04532293096257,
             0.022149945780234485,
             2.2702461593918635,
-            47.04532293299781,
+            47.04532293096257,
         ),
         48: (
-            48.04629172951169,
+            48.046291726868986,
             0.002142167346900965,
             0.21956023009393977,
-            48.04629172951169,
+            48.046291726868986,
         ),
         49: (
-            49.04956894435918,
+            49.04956894192418,
             4.4886295288353736e-05,
             0.004600595437061851,
-            49.04956894435918,
+            49.04956894192418,
         ),
         50: (
-            50.05315154462678,
+            50.053151542441945,
             2.6452603656753454e-07,
             2.711244643824313e-05,
-            50.05315154462678,
+            50.053151542441945,
         ),
         51: (
-            51.05909655531064,
+            51.05909655320065,
             1.6186163397759485e-10,
             1.6589916586542372e-08,
-            51.05909655531064,
+            51.05909655320065,
         ),
     }, spectrum.asdict()
-    assert not spectrum.dataframe().empty
 
-    assert abs(spectrum.mean - 46.06852122027406) < 1e-9, spectrum.mean
+    assert abs(spectrum.mean - 46.06852121798895) < 1e-9, spectrum.mean
     assert spectrum.peak.astuple() == (
         46,
-        46.04186481295,
+        46.04186481066,
         0.9756627354527866,
         100.0,
-        46.04186481295,
+        46.04186481066,
     ), spectrum.peak.astuple()
 
 
@@ -301,6 +307,19 @@ def test_formulas_mass(formula, empirical, mass):
         '[CHNOP[13C]]__2-',
         'O2_-2',
         'C+a',
+        'peptide(XZ)',
+        'peptide(gg)',
+        'ssdna(AXT)',
+        'dsdna(AXT)',
+        'dsrna(AT)',
+        '(H]',
+        '[H)',
+        '{H>',
+        '(C[H)]',
+        '+',
+        '-',
+        '_2-',
+        '[]+',
     ],
 )
 def test_formulas_invalid(formula):
@@ -325,6 +344,9 @@ def test_formula_groups(key, value):
         ('[11C]', 'unknown isotope', '[11C]\n.^'),
         ('O: 0;26, 30Si: 0.74', 'invalid list of mass fractions', ''),
         ('H^++', 'unexpected character', 'H^\n.^'),
+        ('peptide(XZ)', 'unknown sequence item', 'XZ\n^'),
+        ('(H]', 'mismatched parentheses', '(H]\n^'),
+        ('+', 'charge without formula', '+\n^'),
     ],
 )
 def test_formula_error(formula, message, detail):
@@ -395,6 +417,10 @@ def test_formula_elements(formula, expected):
     [
         ('BrC2H5', 'C2H5Br'),
         ('[(CH3)3Si2]2NNa', 'C6H18NNaSi4'),
+        ('C2H2O+2H2O', 'C2H6O3'),
+        ('H2O+2H2O', 'H6O3'),
+        ('CH3COOH+2CH3COOH', 'C6H12O6'),
+        ('[13C][12C]+', '[[12C][13C]]+'),
     ],
 )
 def test_formula_formula(formula, expected):
@@ -445,6 +471,9 @@ def test_formula_atoms(formula, expected):
     [
         ('H2O', 0),
         ('SO4_2-', -2),
+        ('[13C][12C]+', 1),
+        ('GG+', 1),
+        ('WQ_2-', -2),
     ],
 )
 def test_formula_charge(formula, expected):
@@ -520,7 +549,9 @@ def test_formula_mz(formula, expected):
     ('formula', 'expected'),
     [
         ('C', Isotope(12.0, 0.9893, 12)),
-        ('13C', Isotope(13.003355, 0.0107, 13)),
+        ('13C', Isotope(13.003355, 1.0, 13)),
+        ('[13C]C', Isotope(25.003355, 0.9893, 25)),
+        ('D2O', Isotope(20.023118, 0.99757, 20)),
         ('SO4_2-', Isotope(95.952826812, 0.9407, 96, -2)),
         ('C48H32AgCuO12P2Ru4', Isotope(1439.588966, 0.0020507511, 1440)),
     ],
@@ -537,13 +568,19 @@ def test_formula_isotope(formula, expected):
     assert isotope.charge == expected.charge
 
 
+def test_formula_isotope_copy():
+    """Test Formula.isotope cannot modify formula."""
+    f = Formula('C')
+    f.isotope.mass = 0.0
+    assert f.monoisotopic_mass == 12.0
+
+
 def test_formula_composition():
     """Test Formula.composition method."""
     composition = Formula('[12C][13C]C').composition()
 
     composition.astuple()
     composition.asdict()
-    composition.dataframe()
 
     assert 'Element  Count  Relative mass  Fraction %' in str(composition)
     assert '12C' in str(composition)
@@ -678,13 +715,58 @@ def test_formula_spectrum(formula, mean, expected):
 
     assert spectrum.range == (expected[0][0], expected[-1][0])
 
-    spectrum.dataframe()
+
+def test_formula_spectrum_min_fraction():
+    """Test Formula.spectrum min_fraction argument."""
+    f = Formula('H2O')
+    assert len(f.spectrum(min_fraction=1.0, min_intensity=1)) == 0
+    for min_fraction in (-0.1, 1.1, math.nan):
+        with pytest.raises(ValueError, match='min_fraction'):
+            f.spectrum(min_fraction=min_fraction)
+
+
+@pytest.mark.parametrize('formula', ['', 'C2H5OH', '[12C][13C]C', 'SO4_2-'])
+def test_dataframe(formula):
+    """Test Composition.dataframe and Spectrum.dataframe methods."""
+    pytest.importorskip('pandas')
+    f = Formula(formula)
+
+    composition = f.composition()
+    df = composition.dataframe()
+    assert df.index.name == 'Element'
+    assert list(df.columns) == ['Count', 'Relative mass', 'Fraction']
+    rows = df.reset_index().itertuples(index=False, name=None)
+    assert tuple(rows) == composition.astuple()
+
+    spectrum = f.spectrum(min_intensity=0.1)
+    df = spectrum.dataframe()
+    assert df.index.name == 'Mass number'
+    assert list(df.columns) == [
+        'Relative mass',
+        'Fraction',
+        'Intensity %',
+        'm/z',
+    ]
+    rows = df.reset_index().itertuples(index=False, name=None)
+    assert tuple(rows) == spectrum.astuple()
 
 
 def test_formula_mul():
     """Test Formula multiplication."""
     formula = Formula('HO-') * 2
     assert formula.expanded == '[(HO)2]2-'
+    assert (Formula('') * 2).expanded == ''
+
+    f = Formula('H2O')
+    assert f.__mul__(True) is NotImplemented  # noqa: FBT003
+    with pytest.raises(TypeError):
+        _ = f * True
+    with pytest.raises(TypeError):
+        _ = f * 2.0
+    with pytest.raises(ValueError):
+        _ = f * 0
+    with pytest.raises(ValueError):
+        _ = f * -1
 
 
 def test_formula_rmul():
@@ -699,10 +781,19 @@ def test_formula_add():
     assert formula.expanded == '[(H2O)(HO)]-'
 
     formula = Formula('H2O') + Formula('')
-    assert formula.expanded == '(H2O)()'
+    assert formula.expanded == '(H2O)'
+
+    formula = sum([Formula('H2O'), Formula('HO-')])
+    assert formula.expanded == '[(H2O)(HO)]-'
+    assert sum([], Formula('H2O')).expanded == 'H2O'
+    assert Formula('H2O').__radd__(1) is NotImplemented
+    assert Formula('H2O').__radd__(False) is NotImplemented  # noqa: FBT003
 
     with pytest.raises(TypeError):
         Formula('H2O') + 'O'
+    with pytest.raises(TypeError):
+        'O' + Formula('H2O')
+    assert Formula('H2O').__add__('O') is NotImplemented
 
 
 def test_formula_sub():
@@ -716,11 +807,28 @@ def test_formula_sub():
     formula = Formula('H2O') - Formula('')
     assert formula.expanded == 'H2O'
 
-    with pytest.raises(ValueError):
+    with pytest.raises(FormulaError, match='negative number'):
         Formula('H2O') - Formula('O2')
+    with pytest.raises(FormulaError, match='element C not in H2O'):
+        Formula('H2O') - Formula('C')
+    with pytest.raises(FormulaError, match='element 2H not in H2O'):
+        Formula('H2O') - Formula('D')
 
     with pytest.raises(TypeError):
         Formula('H2O') - 'O'
+    with pytest.raises(TypeError):
+        'O' - Formula('H2O')
+    assert Formula('H2O').__sub__('O') is NotImplemented
+
+
+def test_formula_eq():
+    """Test Formula equality and hash."""
+    assert Formula('HOH') == Formula('H2O')
+    assert Formula('D2O') == Formula('[2H]2O')
+    assert Formula('H2O') != Formula('D2O')
+    assert Formula('OH-') != Formula('OH')
+    assert Formula('H2O') != 'H2O'
+    assert len({Formula('HOH'), Formula('H2O'), Formula('')}) == 2
 
 
 @pytest.mark.parametrize(
@@ -802,6 +910,10 @@ def test_mass_charge_ratio(value, charge, expected):
         ('Formula_+', ('Formula', 1)),
         ('Formula+-', ('Formula', 0)),
         ('Formul+a+', ('Formul+a', 1)),
+        ('+H+', ('+H', 1)),
+        ('[13C][12C]+', ('[13C][12C]', 1)),
+        ('[13C][12C]2-', ('[13C][12C]', -2)),
+        ('[2H]O[2H]_-', ('[2H]O[2H]', -1)),
     ],
 )
 def test_split_charge(formula, expected):
@@ -821,6 +933,7 @@ def test_split_charge(formula, expected):
         ('CuSO4.5H2O', {}, 'CuSO4(H2O)5'),
         ('CuSO4+5*H2O', {}, 'CuSO4(H2O)5'),
         ('5*H2O', {}, '(H2O)5'),
+        ('C2H2O+2H2O', {}, 'C2H2O(H2O)2'),
         ('O2+12C', {}, 'O2(C)12'),
         ('ATC', {}, '((C10H12N5O5P)(C9H12N3O6P)(C10H13N2O7P)H2O)'),
         ('AUC', {}, '((C10H12N5O6P)(C9H12N3O7P)(C9H11N2O8P)H2O)'),
@@ -828,6 +941,9 @@ def test_split_charge(formula, expected):
         ('peptide(GG)', {}, '((C2H3NO)2H2O)'),
         ('WQ', {}, '((C5H8N2O2)(C11H10N2O)H2O)'),
         ('WQ', {'parse_oligos': False}, 'WQ'),
+        ('GG+', {}, '[((C10H12N5O6P)2H2O)]+'),
+        ('WQ_2-', {}, '[((C5H8N2O2)(C11H10N2O)H2O)]2-'),
+        ('AUC-', {}, '[((C10H12N5O6P)(C9H12N3O7P)(C9H11N2O8P)H2O)]-'),
         ('O: 0.26, 30Si: 0.74', {}, 'O2[30Si]3'),
         (
             'O: 0.26, 30Si: 0.74',
@@ -895,6 +1011,15 @@ def test_from_elements(formula, kwargs, expected):
         ({'[2H]': 0.2, 'O': 0.8}, {}, 'O[2H]2'),
         ({'H': 8.97, 'C': 59.39, 'O': 31.64}, {}, 'C5H9O2'),
         ({'O': 0.26, '30Si': 0.74}, {}, 'O2[30Si]3'),
+        ({'C': 120.1074, 'H': 11.087351}, {'maxcount': 10}, 'C10H11'),
+        # Hill order
+        ({'Cl': 106.3581, 'C': 12.01074, 'H': 1.007941}, {}, 'CHCl3'),
+        # aliases of same isotope are added
+        ({'D': 0.1, '[2H]': 0.1, 'O': 0.8}, {}, 'O[2H]2'),
+        # counts may exceed maxcount
+        ({'C': 1201.074, 'H': 1.007941}, {'maxcount': 10}, 'C100H'),
+        # best fit without tolerance
+        ({'C': 12.01074, 'H': 1.007941 * 1.4}, {'maxcount': 1}, 'CH'),
     ],
 )
 def test_from_fractions(formula, kwargs, expected):
@@ -902,10 +1027,40 @@ def test_from_fractions(formula, kwargs, expected):
     assert from_fractions(formula, **kwargs) == expected
 
 
-def test_from_fractions_error():
-    """Test from_fractions function."""
-    with pytest.raises(FormulaError):
-        from_fractions({'[12O]': 1.0})
+@pytest.mark.parametrize(
+    ('fractions', 'match'),
+    [
+        ({'[12O]': 1.0}, 'unknown isotope'),
+        ({'O': 0.0, 'H': 1.0}, 'fractions must be positive'),
+        ({'O': -0.1, 'H': 1.0}, 'fractions must be positive'),
+        # issue #22
+        ({'O': -0.2, '30Si': 1.2}, 'fractions must be positive'),
+        ({'O': float('nan'), 'H': 1.0}, 'fractions must be positive'),
+        ({'O': float('inf'), 'H': 1.0}, 'fractions must be positive'),
+        ({'x': 0.5, 'O': 0.5}, 'invalid symbol'),
+        ({'12': 0.5, 'O': 0.5}, 'invalid symbol'),
+        ({'': 0.5, 'O': 0.5}, 'invalid symbol'),
+        ({'[2H': 0.5, 'O': 0.5}, 'invalid symbol'),
+        ({'2H]': 0.5, 'O': 0.5}, 'invalid symbol'),
+        ({'Carbon': 0.5, 'O': 0.5}, 'unknown element'),
+        ({'12Carbon': 0.5, 'O': 0.5}, 'unknown element'),
+        ({'O': 'x', 'H': 0.5}, 'invalid fraction'),
+    ],
+)
+def test_from_fractions_error(fractions, match):
+    """Test from_fractions function errors."""
+    with pytest.raises(FormulaError, match=match):
+        from_fractions(fractions)
+
+
+def test_from_fractions_tolerance():
+    """Test from_fractions tolerance argument."""
+    fractions = {'C': 12.01074, 'H': 1.007941 * 1.4}
+    with pytest.raises(FormulaError, match='deviate'):
+        from_fractions(fractions, maxcount=1, tolerance=0.1)
+    assert from_fractions(fractions, maxcount=1, tolerance=0.5) == 'CH'
+    assert from_fractions(fractions, tolerance=0.01) == 'C5H7'
+    assert Formula('O: 0.1, D: 0.1, [2H]: 0.1, O: 0.7').formula == '[2H]2O'
 
 
 @pytest.mark.parametrize(
@@ -918,6 +1073,13 @@ def test_from_fractions_error():
 def test_from_sequence(sequence, groups, expected):
     """Test from_sequence function."""
     assert from_sequence(sequence, groups) == expected
+
+
+def test_from_sequence_error():
+    """Test from_sequence function error."""
+    with pytest.raises(FormulaError, match='unknown sequence item') as exc:
+        from_sequence('AAX', {'A': 'B'})
+    assert exc.value.position == 2
 
 
 @pytest.mark.parametrize(
@@ -1107,14 +1269,20 @@ def test_concentration_edge_cases():
     with pytest.raises(ValueError, match='zero mass'):
         empty.ppm_to_molarity(1000)
 
-    # zero volume in molarity
+    # zero or negative volume
     f = Formula('H2O')
-    with pytest.raises(ValueError, match='volume must be non-zero'):
+    with pytest.raises(ValueError, match='volume must be positive'):
         f.molarity(18.0, 0.0)
+    with pytest.raises(ValueError, match='volume must be positive'):
+        f.molarity(18.0, -1.0)
+    with pytest.raises(ValueError, match='volume must not be negative'):
+        f.mass_for_molarity(1.0, -1.0)
 
-    # zero density in molarity_to_ppm
-    with pytest.raises(ValueError, match='density must be non-zero'):
+    # zero or negative density
+    with pytest.raises(ValueError, match='density must be positive'):
         f.molarity_to_ppm(1.0, density=0.0)
+    with pytest.raises(ValueError, match='density must be positive'):
+        f.ppm_to_molarity(1000, -1.0)
 
     # subtraction resulting in empty formula
     result = Formula('H2O') - Formula('H2O')
@@ -1122,19 +1290,30 @@ def test_concentration_edge_cases():
     with pytest.raises(ValueError, match='zero mass'):
         result.moles(1.0)
 
+    # unknown units
+    with pytest.raises(ValueError, match='unknown unit'):
+        f.moles(1.0, 'lb')
+    with pytest.raises(ValueError, match='unknown unit'):
+        f.mass_from_moles(1.0, 'lb')
+    with pytest.raises(ValueError, match='unknown unit'):
+        f.molarity(1.0, 1.0, volume_unit='gal')
+    with pytest.raises(ValueError, match='unknown unit'):
+        f.mass_for_molarity(1.0, 1.0, mass_unit='lb')
+
+    # CODATA 2022 Dalton
+    assert f.mass_from_moles(1.0, 'Da') == pytest.approx(
+        f.mass / 1.66053906892e-24, rel=1e-12
+    )
+
 
 def test_from_fractions_edge_cases():
     """Test edge cases for from_fractions function."""
     # zero fractions
-    with pytest.raises(
-        FormulaError, match='sum of fractions must be positive'
-    ):
+    with pytest.raises(FormulaError, match='fractions must be positive'):
         from_fractions({'H': 0.0, 'O': 0.0})
 
     # negative fractions that sum to zero or negative
-    with pytest.raises(
-        FormulaError, match='sum of fractions must be positive'
-    ):
+    with pytest.raises(FormulaError, match='fractions must be positive'):
         from_fractions({'H': -0.5, 'O': 0.5})
 
     # empty dict returns empty string (existing behavior)
@@ -1173,6 +1352,53 @@ def test_molarity_to_ppm(formula, molarity, density, expected):
     f = Formula(formula)
     result = f.molarity_to_ppm(molarity, density)
     assert result == pytest.approx(expected, rel=1e-4)
+
+
+@pytest.mark.parametrize(
+    ('density', 'density_unit'),
+    [
+        (1.2, 'g/mL'),
+        (1.2, 'g/cm3'),
+        (1.2, 'kg/L'),
+        (1.2, 'kg/dm3'),
+        (1200, 'g/L'),
+        (1200, 'kg/m3'),
+        (1200, 'mg/mL'),
+    ],
+)
+def test_ppm_density_unit(density, density_unit):
+    """Test density_unit argument of ppm conversions."""
+    f = Formula('NaCl')
+    assert f.ppm_to_molarity(
+        1000, density, density_unit=density_unit
+    ) == pytest.approx(f.ppm_to_molarity(1000, 1.2))
+    assert f.molarity_to_ppm(
+        0.5, density, density_unit=density_unit
+    ) == pytest.approx(f.molarity_to_ppm(0.5, 1.2))
+
+
+def test_ppm_density_unit_errors():
+    """Test density_unit errors of ppm conversions."""
+    f = Formula('NaCl')
+    with pytest.raises(ValueError, match='unknown unit'):
+        f.ppm_to_molarity(1000, 1.0, density_unit='lb/gal')
+    with pytest.raises(ValueError, match='unknown unit'):
+        f.molarity_to_ppm(1.0, 1.0, density_unit='lb/gal')
+    with pytest.raises(ValueError, match='density must be positive'):
+        f.ppm_to_molarity(1000, 0.0, density_unit='g/L')
+
+
+@pytest.mark.parametrize(
+    ('alias', 'units'),
+    [
+        (molmass.MassUnit, molmass.molmass.MASS_UNIT),
+        (molmass.VolumeUnit, molmass.molmass.VOLUME_UNIT),
+        (molmass.DensityUnit, molmass.molmass.DENSITY_UNIT),
+    ],
+)
+def test_unit_aliases(alias, units):
+    """Test unit type aliases match conversion factor mappings."""
+    assert typing.get_args(alias) == tuple(units)
 
 
 @pytest.mark.parametrize(
@@ -1229,6 +1455,53 @@ def test_elements():
         e.validate()
         eval(repr(e))  # noqa: S307
 
+    carbon = ELEMENTS['C']
+    assert {carbon: 1}[ELEMENTS[6]] == 1
+    assert carbon == ELEMENTS[6]
+    assert carbon != dataclasses.replace(carbon)
+
+    custom = dataclasses.replace(carbon, number=200, symbol='Xx', name='Xx')
+    assert custom.description == ''
+
+    invalid = dataclasses.replace(carbon, isotopes={12: Isotope(13.0, 1, 13)})
+    with pytest.raises(ValueError, match='isotope key'):
+        invalid.validate()
+
+    elements = Elements(
+        ELEMENTS['H'], dataclasses.replace(ELEMENTS['H'], symbol='Q', name='Q')
+    )
+    assert len(elements) == 1
+    assert 'Q' in elements
+    assert 'H' not in elements
+    assert 'Hydrogen' not in elements
+
+
+def test_sqlite_script():
+    """Test sqlite_script function."""
+    con = sqlite3.connect(':memory:')
+    try:
+        con.executescript(sqlite_script())
+        cur = con.cursor()
+        assert cur.execute(
+            'SELECT massnum, abundance FROM isotope WHERE element=6'
+        ).fetchall() == [(12, 0.9893), (13, 0.0107)]
+        assert cur.execute('SELECT COUNT(*) FROM isotope').fetchone()[0] == (
+            sum(len(e.isotopes) for e in ELEMENTS)
+        )
+        assert sorted(
+            cur.execute(
+                'SELECT shell, subshell, count FROM eleconfig WHERE element=6'
+            ).fetchall()
+        ) == [(1, 's', 2), (2, 'p', 2), (2, 's', 2)]
+        assert cur.execute(
+            'SELECT energy FROM ionenergy WHERE element=1'
+        ).fetchall() == [(13.5984,)]
+        assert cur.execute(
+            'SELECT tboil FROM element WHERE number=6'
+        ).fetchone() == (5100.0,)
+    finally:
+        con.close()
+
 
 def test_analyze():
     """Test analyze function."""
@@ -1272,7 +1545,113 @@ def test_main(capsys):
     with contextlib.suppress(SystemExit):
         assert main(['--help']) == 0
     result = capsys.readouterr().out
-    assert 'Usage: molmass [options] formula' in result
+    assert 'usage: molmass [options] formula' in result
+
+
+def test_web_analyze(monkeypatch):
+    """Test web.analyze function."""
+    result = web.analyze('C8H10N4O2')
+    assert re.search(r'Mean of distribution</th><td>\d+\.\d{5}</td>', result)
+    assert 'Mass Distribution' in result
+
+    result = web.analyze('SO4_2-')
+    assert '<th scope="col">m/z</th>' in result
+
+    # single peak shows most abundant mass but no distribution table
+    result = web.analyze('F')
+    assert 'Most abundant mass' in result
+    assert 'Mass Distribution' not in result
+
+    result = web.analyze('G' * web.MAXLENGTH)
+    assert 'Error' not in result
+    result = web.analyze('G' * (web.MAXLENGTH + 1))
+    assert 'Error: Formula too long' in result
+
+    def raise_empty(*_args, **_kwargs):
+        raise ValueError
+
+    monkeypatch.setattr(web.molmass, 'Formula', raise_empty)
+    assert 'Error: ValueError' in web.analyze('H2O')
+
+
+def test_web_response():
+    """Test web.response function."""
+    url = 'http://127.0.0.1/\'"><script>'
+    result = web.response({'q': '<b>H2O'}, url=url)
+    assert '<script>' not in result
+    assert '<b>H2O' not in result
+    assert (
+        'data-url="http://127.0.0.1/&#x27;&quot;&gt;&lt;script&gt;"' in result
+    )
+    assert 'Isotopic Composition' in web.response({'q': 'isotopes'}, url='/')
+    assert 'Abundance %' in web.response({'q': 'isotopes'}, url='/')
+    assert 'Chemical Groups' in web.response({'q': 'groups'}, url='/')
+    assert 'Examples' in web.response({}, url='/')
+
+
+def test_web_server():
+    """Test web application served by http.server."""
+    server = web.http_server('http://127.0.0.1:0/', {'q': 'H2O'})
+    host, port = server.server_address[:2]
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    url = f'http://{host}:{port}/'
+    try:
+        # first request uses form
+        with urllib.request.urlopen(url) as resp:
+            assert 'H<sub>2</sub>O' in resp.read().decode()
+        with urllib.request.urlopen(url + '?q=CO2') as resp:  # noqa: S310
+            assert 'CO<sub>2</sub>' in resp.read().decode()
+        with pytest.raises(urllib.error.HTTPError) as exc:
+            urllib.request.urlopen(url + 'web.py?q=web.py')  # noqa: S310
+        assert exc.value.code == 404
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    with pytest.raises(ValueError, match='invalid URL'):
+        web.http_server('http://127.0.0.1/')
+
+
+@pytest.mark.parametrize(
+    ('formula', 'position'),
+    [
+        ('[Na+]', 3),
+        ('[Fe+2]', 3),
+        ('[Fe2+]', 4),
+        ('[Fe+2]Cl2', 3),
+        ('[SO4-2]', 4),
+        ('(OH-)2', 3),
+        ('{Fe+2}', 3),
+        ('(Na+)', 3),
+        ('[Na+H]', 3),
+        ('[Fe+2Cl]', 3),
+        ('[(H)+Na]2+', 4),
+    ],
+)
+def test_issue20_charge_inside_brackets(formula, position):
+    """Test signs inside brackets are rejected (issue #20)."""
+    with pytest.raises(FormulaError, match='charge must follow') as exc:
+        Formula(formula)
+    assert exc.value.position == position
+
+
+@pytest.mark.parametrize(
+    ('formula', 'charge', 'atoms'),
+    [
+        ('[Na]+', 1, 1),
+        ('[Fe]2+', 2, 1),
+        ('[SO4]2-', -2, 5),
+        ('Fe+2', 2, 1),
+        ('[[13C][12C]]+', 1, 2),
+        ('peptide(GG_2+)', 2, 17),
+    ],
+)
+def test_issue20_charge_after_brackets(formula, charge, atoms):
+    """Test charges after complete formula are preserved (issue #20)."""
+    f = Formula(formula)
+    assert f.charge == charge
+    assert f.atoms == atoms
 
 
 if __name__ == '__main__':
