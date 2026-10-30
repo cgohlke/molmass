@@ -36,15 +36,10 @@ Run the web application in a local web server::
 
     python -m molmass.web
 
-The application is run in a Flask built-in server, and a web browser is opened.
+The application is run in a local server based on the http.server module,
+and a web browser is opened.
 
-If Flask is not installed, the application is run in a built-in CGI server.
-The cgi module was removed in Python 3.13.
-To run in CGI mode, this script must be made executable on UNIX systems::
-
-    chmod +x ./web.py
-
-Do not run the built-in Flask or CGI servers in a production deployment.
+Do not run the built-in server in a production deployment.
 Instead, for example, create a Flask app and serve it on a production server::
 
     # app.py
@@ -61,13 +56,13 @@ from __future__ import annotations
 
 __all__ = ['HELP', 'analyze', 'groups', 'isotopes', 'main', 'response']
 
-import os
 import re
 import sys
 from html import escape
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from http.server import ThreadingHTTPServer
     from typing import Any
 
 try:
@@ -79,6 +74,9 @@ except ImportError:
     import molmass  # type: ignore[no-redef]
 
 DEBUG = False
+
+MAXLENGTH = 2000
+"""Maximum length of formula string accepted by :py:func:`analyze`."""
 
 PAGE = """<!DOCTYPE html>
 <html lang="en">
@@ -129,7 +127,8 @@ a:hover {{text-decoration: underline; color: #E00000;}}
 </div>
 <div class="buttons">
 <input type="submit" id="a" value="Submit">
-<input type="reset" value="Reset" onclick="window.location='{url}'">
+<input type="reset" value="Reset" data-url="{url}"
+ onclick="window.location=this.dataset.url">
 </div>
 </form>
 <div class="content">
@@ -211,11 +210,16 @@ def response(
     """Return HTML document from submitted web form.
 
     Parameters:
-        form: Flask.request.form or cgi.FieldStorage.
-        url: URL of web application.
-        template: HTML page template. The default is :py:attr:`PAGE`.
-        help: Help text. The default is :py:attr:`HELP`.
-        heads: Additional HTML page head sections.
+        form:
+            Mapping of form fields, for example, Flask ``request.args``.
+        url:
+            URL of web application.
+        template:
+            HTML page template. The default is :py:attr:`PAGE`.
+        help:
+            Help text. The default is :py:attr:`HELP`.
+        heads:
+            Additional HTML page head sections.
 
     """
     if template is None:
@@ -233,14 +237,14 @@ def response(
         formula = ''
         content = isotopes()
     elif formula:
-        content = analyze(formula[:100])
+        content = analyze(formula)
     else:
         content = help.format(version=molmass.__version__)
     if formula:
         formula = escape(formula, quote=True)
     return template.format(
         formula=formula,
-        url=url,
+        url=escape(url, quote=True),
         version=molmass.__version__,
         content=content,
         heads=heads.strip(),
@@ -253,9 +257,12 @@ def analyze(
     """Return analysis of formula as HTML string.
 
     Parameters:
-        formula: Chemical formula.
-        maxatoms: Number of atoms below which to calculate spectrum.
-        min_intensity: Minimum intensity to include in spectrum.
+        formula:
+            Chemical formula of at most :py:attr:`MAXLENGTH` characters.
+        maxatoms:
+            Number of atoms below which to calculate spectrum.
+        min_intensity:
+            Minimum intensity to include in spectrum.
 
     """
 
@@ -269,15 +276,20 @@ def analyze(
 
     spectrum: molmass.Spectrum | None
     result: list[str] = ['<h2 class="hidden">Results</h2>']
+    if len(formula) > MAXLENGTH:
+        result.append(
+            f'<h3>Error: Formula too long, maximum is {MAXLENGTH} characters'
+            '</h3>'
+        )
+        return '\n'.join(result)
     try:
         f = molmass.Formula(formula)
         composition = f.composition()
+        spectrum = None
         if f.atoms < maxatoms:
             spectrum = f.spectrum(min_intensity=min_intensity)
-            if len(spectrum) < 2:
+            if len(spectrum) == 0:
                 spectrum = None
-        else:
-            spectrum = None
         result.append('<table class="results"><caption></caption>')
         result.append(
             '<tr><th scope="row">Hill notation</th>'
@@ -320,7 +332,7 @@ def analyze(
             )
             result.append(
                 '<tr><th scope="row">Mean of distribution</th>'
-                f'<td>{spectrum.mean:.{prec}}</td><td></td></tr>'
+                f'<td>{spectrum.mean:.{prec}f}</td><td></td></tr>'
             )
         result.append(
             '<tr class="spacer"><th scope="row">Number of atoms</th>'
@@ -359,10 +371,7 @@ def analyze(
             result.append('</table>')
 
         if spectrum is not None and len(spectrum) > 1:
-            if abs(spectrum._charge) > 1:  # noqa: SLF001
-                mz = '\n<th scope="col">m/z</th>'
-            else:
-                mz = ''
+            mz = '\n<th scope="col">m/z</th>' if abs(f.charge) > 1 else ''
             result.extend(
                 (
                     '<!--h3>Mass Distribution</h3-->',
@@ -385,8 +394,8 @@ def analyze(
                         '<tr>',
                         f'<th scope="row">{item.massnumber}</th>',
                         f'<td>{item.mass:.{prec}f}</td>',
-                        f'<td>{item.fraction * 100.:.6}</td>',
-                        f'<td>{item.intensity:.6}</td>{mz}',
+                        f'<td>{item.fraction * 100:.6f}</td>',
+                        f'<td>{item.intensity:.6f}</td>{mz}',
                         '</tr>',
                     )
                 )
@@ -395,9 +404,9 @@ def analyze(
     except Exception as exc:
         if DEBUG:
             raise
-        msg = str(exc).splitlines()
-        text = msg[0][0].upper() + msg[0][1:]
-        details = '\n'.join(msg[1:])
+        lines = str(exc).splitlines() or [type(exc).__name__]
+        text = lines[0][:1].upper() + lines[0][1:]
+        details = '\n'.join(lines[1:])
         result.append(
             f'<h3>Error: {escape(text, quote=True)}</h3>'
             f'<pre>{escape(details, quote=True)}</pre>'
@@ -415,7 +424,7 @@ def isotopes() -> str:
     <tr>
     <th scope="col">Element/Isotope</th>
     <th scope="col" class="right">Relative mass</th>
-    <th scope="col" class="right">Abundance</th>
+    <th scope="col" class="right">Abundance %</th>
     </tr>
     {rows}
     </table>""".strip().replace('    ', '')
@@ -469,12 +478,11 @@ def groups() -> str:
         rows: list[str] = []
         for key in sorted(group):
             value = group[key]
-            if isinstance(value, str):
-                link = key if group is molmass.GROUPS else value
-                rows.append(
-                    f'<tr><td>{key}</td>'
-                    f'<td><a href="?q={link}">{value}</a></td></tr>'
-                )
+            link = key if group is molmass.GROUPS else value
+            rows.append(
+                f'<tr><td>{key}</td>'
+                f'<td><a href="?q={link}">{value}</a></td></tr>'
+            )
         result.append(template.format(title=title, rows='\n'.join(rows)))
     return '\n'.join(result)
 
@@ -483,8 +491,10 @@ def webbrowser(url: str, /, delay: float = 1.0) -> None:
     """Open url in web browser after delay.
 
     Parameters:
-        url: URL to open in web browser.
-        delay: Delay in seconds before opening web browser.
+        url:
+            URL to open in web browser.
+        delay:
+            Delay in seconds before opening web browser.
 
     """
     import threading
@@ -493,58 +503,69 @@ def webbrowser(url: str, /, delay: float = 1.0) -> None:
     threading.Timer(delay, lambda: webbrowser.open(url)).start()
 
 
-def cgi(url: str, *, open_browser: bool = True, debug: bool = True) -> int:
-    """Run web application in local CGI server.
+def serve(
+    url: str,
+    *,
+    form: dict[str, str] | None = None,
+    open_browser: bool = True,
+) -> int:
+    """Run web application in local http.server.
 
     Parameters:
-        url: URL at which the web application is served.
-        open_browser: Open `url` in web browser.
-        debug: Enable debug mode.
+        url:
+            URL at which the web application is served.
+        form:
+            Form data to use on first request.
+        open_browser:
+            Open `url` in web browser.
 
     """
-    import cgi
-    import cgitb
-
-    if debug:
-        cgitb.enable()
-
-    dirname, filename = os.path.split(__file__)
-    if filename[-1] != 'y':
-        filename = filename[:-1]  # don't use .pyc or .pyo
-    if not url.endswith('/'):
-        url += '/'
-    url += filename
-    if dirname:
-        os.chdir(dirname)
-
-    if os.getenv('SERVER_NAME'):
-        print('Content-type: text/html\n\n')  # noqa: T201
-        request = cgi.FieldStorage()
-        request.get = request.getfirst
-        print(response(request, url))  # noqa: T201
-    else:
-        from http.server import CGIHTTPRequestHandler, HTTPServer
-        from urllib.parse import urlparse
-
-        def is_cgi(self: Any) -> bool:
-            # monkey patch for CGIHTTPRequestHandler.is_cgi
-            if filename in self.path:
-                self.cgi_info = '', self.path[1:]
-                return True
-            return False
-
-        CGIHTTPRequestHandler.is_cgi = is_cgi  # type: ignore[method-assign]
-        print('Running CGI script at', url)  # noqa: T201
-        if open_browser:
-            webbrowser(url)
-        urlp = urlparse(url)
-        if urlp.hostname is None or urlp.port is None:
-            msg = f'invalid URL {url!r}'
-            raise ValueError(msg)
-        HTTPServer(
-            (urlp.hostname, urlp.port), CGIHTTPRequestHandler
-        ).serve_forever()
+    server = http_server(url, form)
+    print('Running web application at', url)  # noqa: T201
+    if open_browser:
+        webbrowser(url)
+    with server:
+        server.serve_forever()
     return 0
+
+
+def http_server(
+    url: str, form: dict[str, str] | None = None, /
+) -> ThreadingHTTPServer:
+    """Return http.server serving web application at root of url."""
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from urllib.parse import parse_qs, urlparse
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            nonlocal form
+            request = urlparse(self.path)
+            if request.path != '/':
+                self.send_error(404)
+                return
+            if form is None:
+                query = {k: v[0] for k, v in parse_qs(request.query).items()}
+            else:
+                query, form = form, None
+            body = response(query, url=url).encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/html; charset=utf-8')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    return ThreadingHTTPServer(host_port(url), Handler)
+
+
+def host_port(url: str, /) -> tuple[str, int]:
+    """Return host name and port of url."""
+    from urllib.parse import urlparse
+
+    urlp = urlparse(url)
+    if urlp.hostname is None or urlp.port is None:
+        msg = f'invalid URL {url!r}'
+        raise ValueError(msg)
+    return urlp.hostname, urlp.port
 
 
 def main(
@@ -552,53 +573,22 @@ def main(
     form: dict[str, str] | None = None,
     url: str | None = None,
     open_browser: bool = True,
-    debug: bool = DEBUG,
 ) -> int:
-    """Run web application in local Flask or fallback CGI server.
+    """Run web application in local http.server.
 
     Parameters:
         form:
-            Form data to use on first run.
+            Form data to use on first request.
         url:
             URL at which the web application is served.
             The default is 'http://127.0.0.1:5001/'.
         open_browser:
             Open `url` in web browser.
-        debug:
-            Enable debug mode.
 
     """
     if url is None:
         url = 'http://127.0.0.1:5001/'
-
-    try:
-        from flask import Flask, request
-    except ImportError:
-        return cgi(url, open_browser=open_browser, debug=debug)
-
-    from urllib.parse import urlparse
-
-    urlp = urlparse(url)
-    if urlp.hostname is None or urlp.port is None:
-        msg = f'invalid URL {url!r}'
-        raise ValueError(msg)
-
-    app = Flask(__name__)
-
-    @app.route('/', methods=['GET'])
-    def root() -> str:
-        nonlocal form
-        r = response(
-            request.args if form is None else form, url=request.base_url
-        )
-        form = None
-        return r
-
-    if open_browser:
-        webbrowser(url)
-
-    app.run(host=urlp.hostname, port=urlp.port, debug=debug)
-    return 0
+    return serve(url, form=form, open_browser=open_browser)
 
 
 if __name__ == '__main__':
