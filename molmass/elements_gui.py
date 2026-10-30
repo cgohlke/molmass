@@ -39,14 +39,13 @@ Run the application::
 
 from __future__ import annotations
 
-import contextlib
 import io
 import math
 import os
-import sys
+import webbrowser
 
 import wx
-from wx.lib import buttons, fancytext, rcsizer
+from wx.lib import buttons, fancytext
 
 try:
     from .elements import ELEMENTS, SERIES, __version__
@@ -61,20 +60,17 @@ class MainApp(wx.App):
     version = __version__
     website = 'https://www.cgohlke.com'
     copyright = 'Christoph Gohlke'
-    icon = 'icon.png'
-    with contextlib.suppress(Exception):
-        icon = os.path.join(os.path.dirname(__file__), icon)
+    icon = os.path.join(os.path.dirname(__file__), 'icon.png')
 
     def OnInit(self):
-        wx.LogNull()
-        # wx.InitAllImageHandlers()
+        self._lognull = wx.LogNull()
         mainframe = MainFrame(None, -1)
         self.SetTopWindow(mainframe)
         if wx.Platform != '__WXMAC__':
             mainframe.Centre()
         mainframe.ApplyLayout(False)
         mainframe.Show()
-        return 1
+        return True
 
 
 class MainFrame(wx.Frame):
@@ -119,6 +115,28 @@ class MainFrame(wx.Frame):
         )
         self.menu.Append(menu, 'View')
         menu = wx.Menu()
+        id_wikipedia = wx.NewIdRef()
+        id_webelements = wx.NewIdRef()
+        id_website = wx.NewIdRef()
+        menu.Append(
+            id_wikipedia,
+            'Wikipedia',
+            'Open Wikipedia page of selected element',
+            wx.ITEM_NORMAL,
+        )
+        menu.Append(
+            id_webelements,
+            'WebElements',
+            'Open WebElements page of selected element',
+            wx.ITEM_NORMAL,
+        )
+        menu.AppendSeparator()
+        menu.Append(
+            id_website,
+            'Website',
+            'Open website of the program',
+            wx.ITEM_NORMAL,
+        )
         menu.Append(
             wx.ID_ABOUT,
             'About...',
@@ -142,6 +160,9 @@ class MainFrame(wx.Frame):
         self.Bind(wx.EVT_MENU, self.OnCopy, id=wx.ID_COPY)
         self.Bind(wx.EVT_MENU, self.OnDetails, id=wx.ID_VIEW_DETAILS)
         self.Bind(wx.EVT_MENU, self.OnAbout, id=wx.ID_ABOUT)
+        self.Bind(wx.EVT_MENU, self.OnWikipedia, id=id_wikipedia)
+        self.Bind(wx.EVT_MENU, self.OnWebElements, id=id_webelements)
+        self.Bind(wx.EVT_MENU, self.OnWebsite, id=id_website)
         self.Bind(EVT_ELE_CHANGED, self.OnSelect, self.table)
         self.Bind(EVT_ELE_CHANGED, self.OnSelect, self.details)
         self.Bind(wx.EVT_BUTTON, self.OnDetails, self.disclose)
@@ -185,9 +206,6 @@ class MainFrame(wx.Frame):
     def OnDetails(self, evt):
         self.ApplyLayout(not self.show_info)
 
-    def OnEraseBackground(self, evt):
-        pass
-
     def OnCopy(self, evt):
         dobj = wx.TextDataObject()
         dobj.SetText(repr(ELEMENTS[self.selected + 1]))
@@ -199,7 +217,8 @@ class MainFrame(wx.Frame):
         import wx.adv
 
         info = wx.adv.AboutDialogInfo()
-        info.SetName(MainApp.icon)
+        if os.path.exists(MainApp.icon):
+            info.SetIcon(wx.Icon(MainApp.icon, wx.BITMAP_TYPE_PNG))
         info.SetName(MainApp.name)
         info.SetVersion(MainApp.version)
         info.SetCopyright(MainApp.copyright)
@@ -207,20 +226,14 @@ class MainFrame(wx.Frame):
         wx.adv.AboutBox(info)
 
     def OnWebsite(self, evt):
-        import webbrowser
-
         webbrowser.open(MainApp.website)
 
     def OnWikipedia(self, evt):
-        import webbrowser
-
-        ele = ELEMENTS[self.selected].name
+        ele = ELEMENTS[self.selected + 1].name
         webbrowser.open(f'https://en.wikipedia.org/wiki/{ele}', 1)
 
     def OnWebElements(self, evt):
-        import webbrowser
-
-        ele = ELEMENTS[self.selected].name.lower()
+        ele = ELEMENTS[self.selected + 1].name.lower()
         webbrowser.open(f'https://www.webelements.com/{ele}/', 1)
 
     def OnSelect(self, evt):
@@ -236,9 +249,6 @@ class MainFrame(wx.Frame):
 
     def OnExit(self, evt):
         self.Close()
-        if __name__ == '__main__':
-            sys.exit(0)
-        return self.selected
 
 
 class PeriodicPanel(wx.Panel):
@@ -357,6 +367,8 @@ class PeriodicPanel(wx.Panel):
         self.Layout()
 
     def OnTimer(self, evt):
+        if self.selected < 0:
+            return
         button = self.buttons[self.selected]
         button.SetToggle(button.up)
 
@@ -368,7 +380,8 @@ class PeriodicPanel(wx.Panel):
         if self.selected == select:
             return
         # reset old selection
-        self.buttons[self.selected].SetToggle(False)
+        if self.selected >= 0:
+            self.buttons[self.selected].SetToggle(False)
         # highlight new selection
         self.selected = select
         self.buttons[select].SetToggle(True)
@@ -395,7 +408,10 @@ class ElementPanel(wx.Panel):
             self, -1, '6, 88, 9', style=wx.ALIGN_LEFT
         )
         self.symbol = wx.StaticText(
-            self, -1, 'Mm', style=wx.ALIGN_CENTER_HORIZONTAL
+            self,
+            -1,
+            'Mm',
+            style=wx.ALIGN_CENTER_HORIZONTAL | wx.ST_NO_AUTORESIZE,
         )
         self.name = wx.StaticText(
             self, -1, 'Praseodymium ', style=wx.ALIGN_CENTER_HORIZONTAL
@@ -433,6 +449,7 @@ class ElementPanel(wx.Panel):
         self.name.SetFont(font)
         font.SetPointSize(int(font.GetPointSize() * 1.9))
         self.symbol.SetFont(font)
+        self.symbol.SetMinSize(self.symbol.GetTextExtent(' Mm '))
 
         self.number.SetToolTip('Atomic number')
         self.position.SetToolTip('Group, Period, Block')
@@ -451,71 +468,33 @@ class ElementPanel(wx.Panel):
         self.eleneg.SetToolTip('Electronegativity')
 
         # layout
-        sizer = rcsizer.RowColSizer()
-        sizer.col_w = SPACER
-        sizer.row_h = SPACER
+        sizer = wx.GridBagSizer(0, 0)
+        sizer.SetEmptyCellSize((SPACER, SPACER))
+        fixed = wx.FIXED_MINSIZE
+        sizer.Add(self.number, (0, 0), flag=wx.ALIGN_CENTER_HORIZONTAL | fixed)
         sizer.Add(
-            self.number,
-            row=0,
-            col=0,
-            flag=wx.ALIGN_CENTER_HORIZONTAL | wx.FIXED_MINSIZE,
+            self.position,
+            (0, 1),
+            flag=wx.ALIGN_LEFT | wx.LEFT | fixed,
+            border=SPACER // 2,
+        )
+        sizer.Add(self.symbol, (1, 0), (2, 2), flag=wx.ALIGN_CENTER)
+        sizer.Add(
+            self.name, (3, 0), (1, 2), flag=wx.ALIGN_CENTER_HORIZONTAL | fixed
         )
         sizer.Add(
-            self.position, row=0, col=1, flag=wx.ALIGN_LEFT | wx.FIXED_MINSIZE
+            self.mass, (4, 0), (1, 2), flag=wx.ALIGN_CENTER_HORIZONTAL | fixed
         )
-        sizer.Add(
-            self.symbol,
-            row=1,
-            col=0,
-            rowspan=2,
-            colspan=2,
-            flag=(
-                wx.ALIGN_CENTER_HORIZONTAL
-                | wx.ALIGN_CENTER_VERTICAL
-                | wx.EXPAND
-                | wx.ALL
-            ),
-        )
-        sizer.Add(
-            self.name,
-            row=3,
-            col=0,
-            colspan=2,
-            flag=wx.ALIGN_CENTER_HORIZONTAL | wx.FIXED_MINSIZE,
-        )
-        sizer.Add(
-            self.mass,
-            row=4,
-            col=0,
-            colspan=2,
-            flag=wx.ALIGN_CENTER_HORIZONTAL | wx.FIXED_MINSIZE,
-        )
-        sizer.Add(
-            self.massnumber,
-            row=0,
-            col=2,
-            flag=wx.ALIGN_RIGHT | wx.FIXED_MINSIZE,
-        )
-        sizer.Add(
-            self.protons, row=1, col=2, flag=wx.ALIGN_RIGHT | wx.FIXED_MINSIZE
-        )
-        sizer.Add(
-            self.neutrons, row=2, col=2, flag=wx.ALIGN_RIGHT | wx.FIXED_MINSIZE
-        )
-        sizer.Add(
-            self.electrons,
-            row=3,
-            col=2,
-            flag=wx.ALIGN_RIGHT | wx.FIXED_MINSIZE,
-        )
-        sizer.Add(
-            self.atmrad, row=4, col=2, flag=wx.ALIGN_RIGHT | wx.FIXED_MINSIZE
-        )
-        sizer.Add(self.eleconfig, row=0, col=4, flag=wx.ADJUST_MINSIZE)
-        sizer.Add(self.eleshell, row=1, col=4, flag=wx.ADJUST_MINSIZE)
-        sizer.Add(self.oxistates, row=2, col=4, flag=wx.ADJUST_MINSIZE)
-        sizer.Add(self.ionpot, row=3, col=4, flag=wx.ADJUST_MINSIZE)
-        sizer.Add(self.eleneg, row=4, col=4, flag=wx.ADJUST_MINSIZE)
+        sizer.Add(self.massnumber, (0, 2), flag=wx.ALIGN_RIGHT | fixed)
+        sizer.Add(self.protons, (1, 2), flag=wx.ALIGN_RIGHT | fixed)
+        sizer.Add(self.neutrons, (2, 2), flag=wx.ALIGN_RIGHT | fixed)
+        sizer.Add(self.electrons, (3, 2), flag=wx.ALIGN_RIGHT | fixed)
+        sizer.Add(self.atmrad, (4, 2), flag=wx.ALIGN_RIGHT | fixed)
+        sizer.Add(self.eleconfig, (0, 4))
+        sizer.Add(self.eleshell, (1, 4))
+        sizer.Add(self.oxistates, (2, 4))
+        sizer.Add(self.ionpot, (3, 4))
+        sizer.Add(self.eleneg, (4, 4))
         self.SetAutoLayout(True)
         self.SetSizer(sizer)
         sizer.Fit(self)
@@ -544,7 +523,10 @@ class ElementPanel(wx.Panel):
         self.ionpot.SetLabel(
             f'{ele.ionenergy[0]:.10g} eV' if ele.ionenergy else ''
         )
+        col = COLORS[ele.series]
+        self.symbol.SetBackgroundColour(wx.Colour(col[0], col[1], col[2]))
         self.symbol.SetLabel(ele.symbol)
+        self.symbol.Refresh()
         self.name.SetLabel(ele.name)
 
         label = []
@@ -599,7 +581,14 @@ class DetailsPanel(wx.Panel):
             self,
             wx.ComboBox,
             'Relative Atomic Mass',
-            choices=[f'{p.mass:.10g}' for p in ELEMENTS],
+            choices=[
+                (
+                    f'{p.mass:.10g} \xb1 {p.mass_uncertainty:.2g}'
+                    if p.mass_uncertainty
+                    else f'{p.mass:.10g}'
+                )
+                for p in ELEMENTS
+            ],
             style=wx.CB_READONLY,
             size=(1, -1),
         )
@@ -607,7 +596,7 @@ class DetailsPanel(wx.Panel):
             self,
             wx.ComboBox,
             'Atomic Radius (\xc5)',
-            choices=[f'{p.atmrad:.10g}' for p in ELEMENTS],
+            choices=[f'{p.atmrad:.10g}' if p.atmrad else '' for p in ELEMENTS],
             style=wx.CB_READONLY,
             size=(1, -1),
         )
@@ -615,7 +604,7 @@ class DetailsPanel(wx.Panel):
             self,
             wx.ComboBox,
             'Covalent Radius (\xc5)',
-            choices=[f'{p.covrad:.10g}' for p in ELEMENTS],
+            choices=[f'{p.covrad:.10g}' if p.covrad else '' for p in ELEMENTS],
             style=wx.CB_READONLY,
             size=(1, -1),
         )
@@ -623,7 +612,7 @@ class DetailsPanel(wx.Panel):
             self,
             wx.ComboBox,
             'V.d.Waals Radius (\xc5)',
-            choices=[f'{p.vdwrad:.10g}' for p in ELEMENTS],
+            choices=[f'{p.vdwrad:.10g}' if p.vdwrad else '' for p in ELEMENTS],
             style=wx.CB_READONLY,
             size=(1, -1),
         )
@@ -631,7 +620,7 @@ class DetailsPanel(wx.Panel):
             self,
             wx.ComboBox,
             'Electronegativity',
-            choices=[f'{p.eleneg:.10g}' for p in ELEMENTS],
+            choices=[f'{p.eleneg:.10g}' if p.eleneg else '' for p in ELEMENTS],
             style=wx.CB_READONLY,
             size=(1, -1),
         )
@@ -752,7 +741,8 @@ class DetailsPanel(wx.Panel):
         self.ionpot.ctrl.Clear()
         for ion in ele.ionenergy:
             self.ionpot.ctrl.Append(f'{ion:8.4f}')
-        self.ionpot.ctrl.SetSelection(0)
+        if ele.ionenergy:
+            self.ionpot.ctrl.SetSelection(0)
 
     def OnSelect(self, evt):
         self.SetSelection(evt.GetSelection())
@@ -992,27 +982,10 @@ class DisclosureCtrl(buttons.GenBitmapTextToggleButton):
     def OnPaint(self, evt):
         width, height = self.GetClientSize()
         dc = wx.BufferedPaintDC(self)
-        brush = None
-        bgcol = self.GetBackgroundColour()
-        brush = wx.Brush(bgcol, wx.BRUSHSTYLE_SOLID)
-        defattr = self.GetDefaultAttributes()
-        if self.style & wx.BORDER_NONE and bgcol == defattr.colBg:
-            defattr = self.GetParent().GetDefaultAttributes()
-            # if self.GetParent().GetBackgroundColour() == defattr.colBg:
-            #     if wx.Platform == '__WXMSW__':
-            #         if (
-            #             hasattr(self, 'DoEraseBackground') and
-            #             self.DoEraseBackground(dc)
-            #         ):
-            #             brush = None
-            #     elif wx.Platform == '__WXMAC__':
-            #         brush.MacSetTheme(1)
-            # else:
-            #     bgcol = self.GetParent().GetBackgroundColour()
-            #     brush = wx.Brush(bgcol, wx.BRUSHSTYLE_SOLID)
-        if brush is not None:
-            dc.SetBackground(brush)
-            dc.Clear()
+        dc.SetBackground(
+            wx.Brush(self.GetBackgroundColour(), wx.BRUSHSTYLE_SOLID)
+        )
+        dc.Clear()
         self.DrawLabel(dc, width, height)
 
     def DrawLabel(self, dc, width, height):
@@ -1054,9 +1027,6 @@ class SelectionEvent(wx.PyCommandEvent):
     def __init__(self, evtType, winid, sel):
         wx.PyCommandEvent.__init__(self, evtType, winid)
         self.selection = sel
-
-    def SetSelection(self, select):
-        self.selection = select
 
     def GetSelection(self):
         return self.selection
