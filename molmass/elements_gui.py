@@ -39,13 +39,12 @@ Run the application::
 
 from __future__ import annotations
 
-import io
 import math
 import os
 import webbrowser
 
 import wx
-from wx.lib import buttons, fancytext
+from wx.lib import buttons, stattext
 
 try:
     from .elements import ELEMENTS, SERIES, __version__
@@ -82,6 +81,7 @@ class MainFrame(wx.Frame):
         )
         wx.Frame.__init__(self, *args, **kwds)
         self.selected = -1
+        border = self.FromDIP(BORDER)
 
         self.SetTitle(MainApp.name)
         if os.path.exists(MainApp.icon):
@@ -174,16 +174,16 @@ class MainFrame(wx.Frame):
             1,
             wx.LEFT | wx.TOP | wx.RIGHT | wx.EXPAND | wx.ADJUST_MINSIZE,
             # wx.ALIGN_CENTER_HORIZONTAL |
-            BORDER - 5,
+            self.FromDIP(BORDER - 5),
         )
-        self.sizer.Add((BORDER, BORDER))
+        self.sizer.Add((border, border))
         self.sizer.Add(
             self.notebook,
             0,
             wx.LEFT | wx.RIGHT | wx.BOTTOM | wx.EXPAND |
             # wx.ALIGN_CENTER_HORIZONTAL | wx.ALIGN_CENTER_VERTICAL |
             wx.ADJUST_MINSIZE,
-            BORDER,
+            border,
         )
 
         self.notebook.SetSelection(1)
@@ -277,14 +277,20 @@ class PeriodicPanel(wx.Panel):
         self.buttons = list(range(len(ELEMENTS)))
         self.selected = -1
         self.info = ElementPanel(self, -1, pos=(0, 0))
+        spacer = self.FromDIP(SPACER)
 
         # create element buttons
-        buttonsize = math.ceil((self.info.Size[0] + 4) / 9.0)
-        buttonsize = max(buttonsize, 30)
+        width, height = self.info.Size
+        buttonsize = max(
+            math.ceil((width + 4) / 9.0),
+            # info panel must fit above the group labels in row 3
+            math.ceil((height - spacer) / 2.5),
+            self.FromDIP(30),
+        )
         for row in PeriodicPanel.LAYOUT.splitlines()[1:-1]:
             for col in row.split():
                 if col == '.':
-                    self.sizer.Add((SPACER, SPACER))
+                    self.sizer.Add((spacer, spacer))
                 elif col[0] in '123456789*':
                     static = wx.StaticText(
                         self, -1, col, style=wx.ALIGN_CENTER | wx.ALIGN_BOTTOM
@@ -296,7 +302,7 @@ class PeriodicPanel(wx.Panel):
                         | wx.ALIGN_CENTER_HORIZONTAL
                         | wx.ALIGN_CENTER_VERTICAL
                         | wx.FIXED_MINSIZE,
-                        SPACER // 2,
+                        spacer // 2,
                     )
                 else:
                     ele = ELEMENTS[col]
@@ -331,12 +337,12 @@ class PeriodicPanel(wx.Panel):
         # position element info panel
         cw = self.sizer.GetColWidths()
         rh = self.sizer.GetRowHeights()
-        self.info.Move((sum(cw[:3]) + cw[3] // 2, (rh[0] - SPACER) // 2 - 1))
+        self.info.Move((sum(cw[:3]) + cw[3] // 2, (rh[0] - spacer) // 2 - 1))
 
         # legend of chemical series
-        self.legendpos = (sum(cw[:13]), (rh[0] - SPACER) // 2 - 1)
+        self.legendpos = (sum(cw[:13]), (rh[0] - spacer) // 2 - 1)
         self.legendsize = (sum(cw[13:17]) + cw[17] // 2, -1)
-        self.legend = wx.StaticText(
+        self.legend = stattext.GenStaticText(
             self,
             -1,
             ' Alkaline earth metals ',
@@ -344,6 +350,7 @@ class PeriodicPanel(wx.Panel):
             pos=self.legendpos,
             size=self.legendsize,
         )
+        self.legend.SetForegroundColour(wx.BLACK)
         self.legend.SetToolTip('Chemical series')
 
         # blinking element button
@@ -407,12 +414,13 @@ class ElementPanel(wx.Panel):
         self.position = wx.StaticText(
             self, -1, '6, 88, 9', style=wx.ALIGN_LEFT
         )
-        self.symbol = wx.StaticText(
+        self.symbol = stattext.GenStaticText(
             self,
             -1,
             'Mm',
             style=wx.ALIGN_CENTER_HORIZONTAL | wx.ST_NO_AUTORESIZE,
         )
+        self.symbol.SetForegroundColour(wx.BLACK)
         self.name = wx.StaticText(
             self, -1, 'Praseodymium ', style=wx.ALIGN_CENTER_HORIZONTAL
         )
@@ -430,11 +438,10 @@ class ElementPanel(wx.Panel):
         self.eleshell = wx.StaticText(
             self, -1, '2, 8, 18, 32, 32, 15, 2', style=wx.ALIGN_LEFT
         )
-        self.eleconfig = StaticFancyText(
+        self.eleconfig = wx.StaticText(
             self,
             -1,
-            '[Xe] 4f<sup>14</sup> 5d<sup>10</sup>'
-            ' 6s<sup>2</sup> 6p<sup>6</sup> ',
+            '[Xe] 4f\u00b9\u2074 5d\u00b9\u2070 6s\u00b2 6p\u2076 ',
             style=wx.ALIGN_LEFT,
         )
         self.oxistates = wx.StaticText(self, -1, '1*, 2, 3, 4, 5, 6, -7 ')
@@ -468,15 +475,16 @@ class ElementPanel(wx.Panel):
         self.eleneg.SetToolTip('Electronegativity')
 
         # layout
+        spacer = self.FromDIP(SPACER)
         sizer = wx.GridBagSizer(0, 0)
-        sizer.SetEmptyCellSize((SPACER, SPACER))
+        sizer.SetEmptyCellSize((spacer, spacer))
         fixed = wx.FIXED_MINSIZE
         sizer.Add(self.number, (0, 0), flag=wx.ALIGN_CENTER_HORIZONTAL | fixed)
         sizer.Add(
             self.position,
             (0, 1),
             flag=wx.ALIGN_LEFT | wx.LEFT | fixed,
-            border=SPACER // 2,
+            border=spacer // 2,
         )
         sizer.Add(self.symbol, (1, 0), (2, 2), flag=wx.ALIGN_CENTER)
         sizer.Add(
@@ -534,9 +542,7 @@ class ElementPanel(wx.Panel):
             if orb.startswith('[') and len(orb) > 2:
                 label.append(orb)
             else:
-                label.append(orb[:2] + '<sup>' + orb[2:] + '</sup>')
-
-        label.append('<sup> </sup>')  # fix ADJUST_MINSIZE
+                label.append(orb[:2] + orb[2:].translate(SUPERSCRIPT))
         self.eleconfig.SetLabel(' '.join(label))
 
         self.Thaw()
@@ -660,35 +666,36 @@ class DetailsPanel(wx.Panel):
         )
 
         # layout
+        spacer = self.FromDIP(SPACER)
         sizer = wx.BoxSizer(wx.VERTICAL)
         sizer_top = wx.BoxSizer(wx.HORIZONTAL)
         sizer_left = wx.BoxSizer(wx.VERTICAL)
         sizer_right = wx.BoxSizer(wx.VERTICAL)
         sizer_num = wx.BoxSizer(wx.HORIZONTAL)
         style = wx.RIGHT | wx.BOTTOM | wx.EXPAND | wx.ADJUST_MINSIZE
-        sizer_left.Add(self.names, 0, style, SPACER)
-        sizer_left.Add(self.mass, 0, style, SPACER)
-        sizer_left.Add(self.atmrad, 0, style, SPACER)
-        sizer_left.Add(self.covrad, 0, style, SPACER)
-        sizer_left.Add(self.vdwrad, 0, style, SPACER)
-        sizer_left.Add(self.eleneg, 0, style, SPACER)
+        sizer_left.Add(self.names, 0, style, spacer)
+        sizer_left.Add(self.mass, 0, style, spacer)
+        sizer_left.Add(self.atmrad, 0, style, spacer)
+        sizer_left.Add(self.covrad, 0, style, spacer)
+        sizer_left.Add(self.vdwrad, 0, style, spacer)
+        sizer_left.Add(self.eleneg, 0, style, spacer)
         sizer_top.Add(sizer_left, 1, wx.LEFT | wx.RIGHT, 0)
         style = wx.BOTTOM | wx.EXPAND | wx.ADJUST_MINSIZE
         sizer_num.Add(self.symbols, 1, style, 0)
-        sizer_num.Add((SPACER, 5), 0, 0, 0)
+        sizer_num.Add((spacer, 5), 0, 0, 0)
         sizer_num.Add(self.numbers, 1, style, 0)
-        sizer_right.Add(sizer_num, 0, style, SPACER)
-        sizer_right.Add(self.eleconfig, 0, style, SPACER)
-        sizer_right.Add(self.eleshells, 0, style, SPACER)
-        sizer_right.Add(self.oxistates, 0, style, SPACER)
-        sizer_right.Add(self.ionpot, 0, style, SPACER)
-        sizer_right.Add(self.isotopes, 0, style, SPACER)
+        sizer_right.Add(sizer_num, 0, style, spacer)
+        sizer_right.Add(self.eleconfig, 0, style, spacer)
+        sizer_right.Add(self.eleshells, 0, style, spacer)
+        sizer_right.Add(self.oxistates, 0, style, spacer)
+        sizer_right.Add(self.ionpot, 0, style, spacer)
+        sizer_right.Add(self.isotopes, 0, style, spacer)
         sizer_top.Add(sizer_right, 1, wx.TOP | wx.RIGHT, 0)
         sizer.Add(
             sizer_top,
             1,
             wx.LEFT | wx.RIGHT | wx.TOP | wx.EXPAND | wx.ADJUST_MINSIZE,
-            SPACER,
+            spacer,
         )
         self.SetAutoLayout(True)
         self.SetSizerAndFit(sizer, True)
@@ -793,7 +800,7 @@ class DescriptionPanel(wx.Panel):
             | wx.BOTTOM
             | wx.EXPAND
             | wx.FIXED_MINSIZE,
-            SPACER,
+            self.FromDIP(SPACER),
         )
 
         self.SetAutoLayout(True)
@@ -859,7 +866,7 @@ class ElementButton(buttons.GenToggleButton):
         label = self.GetLabel()
         txtwidth, txtheight = dc.GetTextExtent(label)
         xpos = (width - txtwidth) // 2
-        ypos = ((height * 3) // 4 - txtheight) // 2 - 1
+        ypos = ((height * 3) // 4 - txtheight) // 2 - self.FromDIP(1)
         dc.DrawText(label, xpos, ypos)
 
         font.SetWeight(wx.FONTWEIGHT_LIGHT)
@@ -870,7 +877,7 @@ class ElementButton(buttons.GenToggleButton):
         dc.DrawText(
             label,
             (width - txtwidth) // 2,
-            4 + ypos + (height - txtheight) // 2,
+            self.FromDIP(4) + ypos + (height - txtheight) // 2,
         )
 
 
@@ -901,68 +908,15 @@ class LabeledCtrl(wx.BoxSizer):
             self.unit = None
 
 
-class StaticFancyText(fancytext.StaticFancyText):
-    """StaticFancyText with SetLabel function."""
-
-    def SetLabel(self, label):
-        """Render label."""
-        bmp = fancytext.RenderToBitmap(
-            label, wx.Brush(self.GetBackgroundColour(), wx.BRUSHSTYLE_SOLID)
-        )
-        self.SetBitmap(bmp)
-
-
-class DisclosureCtrl(buttons.GenBitmapTextToggleButton):
+class DisclosureCtrl(buttons.GenToggleButton):
     """Disclosure triangle button."""
-
-    BMP0 = (
-        b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\r\x00\x00'
-        b'\x00\r\x08\x06\x00\x00\x00r\xeb\xe4|\x00\x00\x00\x04sBIT'
-        b'\x08\x08\x08\x08|\x08d\x88\x00\x00\x00\xd5IDAT(\x91\x9d'
-        b'\x921n\x83@\x10E\xdf.!\x96\x9c\x90P"\xd9\x86\x92\x82\x03p'
-        b'\x02h\xa9i9A\xe2\xb38)9\x02w\xc0\t\x94I\xa0H\xd2\xc7'
-        b'\x96(\x918\xc0\xa6Z\x17\x91\x05&_\x1a\xe9k4O\xfa3\x1a!'
-        b'\xa4\xc1\\Im>\xde\xdf\xd4l\xa8,K\x9e\x9fv\xeax\xf8\x99\x84'
-        b'\x85\x8e\xb7}|P\x00\xb6m\x13\x04\x01q\x1cc\xdd\xdd\x8bs\xd0'
-        b'\xd5\xdfF\xdf\xf7TUE\xdb\xb6\xbc\xbe\xecU\x18\x86\x98\xd7'
-        b'\x0b1\ni\r\xc3@Q\x14\xd4u\xcd\xf7\xd7\xa7r]\x97\xe5\xcd'
-        b'\xad\x18\x85\xb4\xba\xae#\xcfs|\xdf?\xf5\xe4\xc8<\x00\x8e'
-        b'\xe3\x90e\x19i\x9aN\xc7\xb3,\x8b(\x8a\xb8h\xa7Y\xd7'
-        b'\xf3<\x0f\xd34I\x92\x84\xd5zsv\xf8$!\r\x844h\x9aFi?Y\xff'
-        b'\xf9\xbd_\xd7\x8c7Z\xc0k\x8d8\x00\x00\x00\x00IEND\xaeB`\x82'
-    )
-
-    BMP1 = (
-        b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\r\x00\x00'
-        b'\x00\r\x08\x06\x00\x00\x00r\xeb\xe4|\x00\x00\x00\x04sBIT'
-        b'\x08\x08\x08\x08|\x08d\x88\x00\x00\x00\xc1IDAT(\x91\x9d\xd2;'
-        b'\x8e\xc20\x10\x80\xe1\x7fB\x0c\x95\xc1\xa5%\xc0)S\xb8I\xd2'
-        b'\xb8Le\x97\xf6\x99s\x81\xdd\xbdBN\xb2\xdb!Y\t\xac`\xbay|'
-        b'\xa3)F\xa49\xf0n4o\x8bOQ\x0b\xf0\xf3\xfd\xf5\xbb,\x0b\xeb'
-        b'\xba>\x1d\xec\xba\x8ey\x9e\x19\xc6I\x1a\x80a\x9cD)\xf5r'
-        b'\xbbR\x8aa\x9c\xa4:\xaf\x94\x821f\x17\x18c(\xa5<\xf2\x07'
-        b'\xba\xde\xee\xe2\xbd\xdfE\xde{\xae\xb7\xbbl\x10@J\t\xadu\x05'
-        b'\xb4\xd6\xa4\x94\xaaZ\x85\xf4\xf9"1\xc6j \xc6\x88>_\xe4)\x02'
-        b'\x08!`\xad\x05\xc0ZK\x08as\xee\x06\xa9\xe3Ir\xce\xb4mK\xce'
-        b'\x19u<\xc9\xbf\x08\xc09G\xdf\xf78\xe7\xf6\xda\xc8\'\xbf\xf7'
-        b'\x07\x13\x12\x18B\x17\x9fx\xa0\x00\x00\x00\x00IEND\xaeB`\x82'
-    )
 
     def __init__(self, parent, winid, label, *args, **kwds):
         kwds['style'] = wx.BORDER_NONE | wx.BU_EXACTFIT
-        buttons.GenBitmapTextToggleButton.__init__(
-            self, parent, winid, None, label, *args, **kwds
+        buttons.GenToggleButton.__init__(
+            self, parent, winid, label, *args, **kwds
         )
-
-        self.bmp0 = wx.Bitmap(wx.Image(io.BytesIO(DisclosureCtrl.BMP0)))
-        self.bmp1 = wx.Bitmap(wx.Image(io.BytesIO(DisclosureCtrl.BMP1)))
-
-        self.SetBitmapLabel(self.bmp0)
-        self.SetBitmapSelected(self.bmp1)
-        if not label:
-            self.SetSize(self.bmp0.Size)
-        else:
-            self.SetBestSize()
+        self.SetInitialSize(self.DoGetBestSize())
         self.labelDelta = 0
         self.useFocusInd = False
         self.SetToolTip('Show')
@@ -972,12 +926,19 @@ class DisclosureCtrl(buttons.GenBitmapTextToggleButton):
         pass
 
     def Notify(self):
-        wx.lib.buttons.GenBitmapTextToggleButton.Notify(self)
+        buttons.GenToggleButton.Notify(self)
         self.SetToolTip('Show' if self.up else 'Hide')
 
     def DoGetBestSize(self):
-        width, height, _usemin = self._GetLabelSize()
-        return (width + 5, height + 4)
+        size = self.FromDIP(13)
+        label = self.GetLabel()
+        if not label:
+            return wx.Size(size, size)
+        width, height = self.GetTextExtent(label)
+        return wx.Size(
+            size + self.FromDIP(5) + width,
+            max(size, height) + self.FromDIP(4),
+        )
 
     def OnPaint(self, evt):
         width, height = self.GetClientSize()
@@ -988,37 +949,49 @@ class DisclosureCtrl(buttons.GenBitmapTextToggleButton):
         dc.Clear()
         self.DrawLabel(dc, width, height)
 
-    def DrawLabel(self, dc, width, height):
-        bmp = self.bmpLabel
-        if bmp is not None:
-            if self.bmpDisabled and not self.IsEnabled():
-                bmp = self.bmpDisabled
-            if self.bmpFocus and self.hasFocus:
-                bmp = self.bmpFocus
-            if self.bmpSelected and not self.up:
-                bmp = self.bmpSelected
-            bmpwidth, bmpheight = bmp.GetWidth(), bmp.GetHeight()
-            hasmask = bmp.GetMask() is not None
+    def DrawLabel(self, dc, width, height, dx=0, dy=0):
+        if self.IsEnabled():
+            # dark gray in light mode, light gray in dark mode
+            fg = self.GetForegroundColour()
+            bg = self.GetBackgroundColour()
+            color = wx.Colour(
+                *(
+                    round(f * 0.6 + b * 0.4)
+                    for f, b in zip(fg.Get(False), bg.Get(False), strict=True)
+                )
+            )
         else:
-            bmpwidth = bmpheight = 0
-
-        dc.SetFont(self.GetFont())
-        color = (
-            self.GetForegroundColour()
-            if self.IsEnabled()
-            else wx.SystemSettings.GetColour(wx.SYS_COLOUR_GRAYTEXT)
-        )
-        dc.SetTextForeground(color)
+            color = wx.SystemSettings.GetColour(wx.SYS_COLOUR_GRAYTEXT)
+        size = self.FromDIP(13)
+        top = (height - size) / 2
+        lo = size * 0.15
+        hi = size * 0.85
+        if self.up:
+            # collapsed: pointing right
+            points = [(lo, top + lo), (hi, top + size / 2), (lo, top + hi)]
+        else:
+            points = [(lo, top + lo), (hi, top + lo), (size / 2, top + hi)]
+        gc = wx.GraphicsContext.Create(dc)
+        gc.SetPen(wx.TRANSPARENT_PEN)
+        gc.SetBrush(wx.Brush(color, wx.BRUSHSTYLE_SOLID))
+        path = gc.CreatePath()
+        path.MoveToPoint(*points[0])
+        for point in points[1:]:
+            path.AddLineToPoint(*point)
+        path.CloseSubpath()
+        gc.FillPath(path)
+        del gc
 
         label = self.GetLabel()
-        _txtwidth, txtheight = dc.GetTextExtent(label)
-        # center bitmap and text
-        # xpos = (width - bmpwidth - txtwidth) // 2 if center else 0
-        xpos = 0
-        if bmp is not None:
-            dc.DrawBitmap(bmp, xpos, (height - bmpheight) // 2, hasmask)
-            xpos += 5
-        dc.DrawText(label, xpos + bmpwidth, (height - txtheight) // 2)
+        if label:
+            dc.SetFont(self.GetFont())
+            dc.SetTextForeground(color)
+            _txtwidth, txtheight = dc.GetTextExtent(label)
+            dc.DrawText(
+                label,
+                size + self.FromDIP(5),
+                (height - txtheight) // 2,
+            )
 
 
 class SelectionEvent(wx.PyCommandEvent):
@@ -1038,6 +1011,11 @@ EVT_ELE_CHANGED = wx.PyEventBinder(PTE_EVT_ELE_CHANGED, 1)
 SPACER = 12 if wx.Platform == '__WXMAC__' else 10
 BORDER = 22 if wx.Platform == '__WXMAC__' else 10
 
+SUPERSCRIPT = str.maketrans(
+    '0123456789',
+    '\u2070\u00b9\u00b2\u00b3\u2074\u2075\u2076\u2077\u2078\u2079',
+)
+
 COLORS = {
     1: (0x99, 0xFF, 0x99),  # Nonmetals
     2: (0xC0, 0xFF, 0xFF),  # Noble gases
@@ -1054,6 +1032,19 @@ COLORS = {
 
 def main():
     """Run the application."""
+    if wx.Platform == '__WXMSW__':
+        # avoid blurry bitmap-scaled rendering on high-DPI displays
+        import contextlib
+        import ctypes
+
+        try:
+            # per-monitor v2
+            ctypes.windll.user32.SetProcessDpiAwarenessContext(
+                ctypes.c_void_p(-4)
+            )
+        except (AttributeError, OSError):
+            with contextlib.suppress(AttributeError, OSError):
+                ctypes.windll.shcore.SetProcessDpiAwareness(2)
     MainApp(0).MainLoop()
 
 
