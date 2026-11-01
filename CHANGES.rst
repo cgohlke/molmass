@@ -4,6 +4,11 @@
 Revisions
 =========
 
+2026.11.1
+
+- Reject empty brackets, for example C() or C1.5 (#24, breaking).
+- Fix elements_gui rendering issues on Windows and macOS.
+
 2026.10.31
 
 - Update atomic weights and isotopic compositions (CIAAW 2024, AME2020).
