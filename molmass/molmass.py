@@ -44,7 +44,7 @@ of the chemical elements.
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD-3-Clause
-:Version: 2026.10.31
+:Version: 2026.11.1
 :DOI: `10.5281/zenodo.7135495 <https://doi.org/10.5281/zenodo.7135495>`_
 
 Quickstart
@@ -83,6 +83,11 @@ This revision was tested with the following requirements and dependencies
 
 Revisions
 ---------
+
+2026.11.1
+
+- Reject empty brackets, for example C() or C1.5 (#24, breaking).
+- Fix elements_gui rendering issues on Windows and macOS.
 
 2026.10.31
 
@@ -204,7 +209,7 @@ Element(
 
 from __future__ import annotations
 
-__version__ = '2026.10.31'
+__version__ = '2026.11.1'
 
 __all__ = [
     'AMINOACIDS',
@@ -525,6 +530,9 @@ class Formula:
                     raise FormulaError(msg, formula, i)
                 if closing.pop() != ')]}>'['([{<'.index(char)]:
                     msg = 'mismatched parentheses'
+                    raise FormulaError(msg, formula, i)
+                if formula[i + 1] in ')]}>':
+                    msg = 'empty brackets'
                     raise FormulaError(msg, formula, i)
             elif char in ')]}>':
                 if num == 0:
