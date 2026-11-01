@@ -29,7 +29,7 @@
 
 """Unittests for the molmass package.
 
-:Version: 2026.10.31
+:Version: 2026.11.1
 
 """
 
@@ -320,6 +320,15 @@ def test_formulas_mass(formula, empirical, mass):
         '-',
         '_2-',
         '[]+',
+        'C()',
+        'C()5',
+        'C[]H',
+        '(C())',
+        # issue #24
+        'C1.5',
+        'H2O.5',
+        'C1.2.3H',
+        'C+5*',
     ],
 )
 def test_formulas_invalid(formula):
@@ -346,6 +355,7 @@ def test_formula_groups(key, value):
         ('H^++', 'unexpected character', 'H^\n.^'),
         ('peptide(XZ)', 'unknown sequence item', 'XZ\n^'),
         ('(H]', 'mismatched parentheses', '(H]\n^'),
+        ('C()2', 'empty brackets', 'C()2\n.^'),
         ('+', 'charge without formula', '+\n^'),
     ],
 )
